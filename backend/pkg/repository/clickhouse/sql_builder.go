@@ -182,13 +182,10 @@ func In(key string, values clickhouse.ArraySet) *whereSQL {
 	if len(values) <= 0 {
 		return ALWAYS_FALSE
 	}
-	if len(values) > 0 {
-		return &whereSQL{
-			Wheres: fmt.Sprintf("%s IN ?", key),
-			Values: []any{values},
-		}
+	return &whereSQL{
+		Wheres: fmt.Sprintf("%s IN ?", key),
+		Values: []any{values},
 	}
-	return ALWAYS_FALSE
 }
 
 func InGroup(vgs ValueInGroups) *whereSQL {

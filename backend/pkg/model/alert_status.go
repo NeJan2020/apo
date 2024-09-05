@@ -10,10 +10,11 @@ const (
 )
 
 type AlertStatusPROM struct {
-	LogMetricsStatus string `json:"logsStatus"` // 日志指标告警
 }
 
 type AlertStatusCH struct {
+	REDMetricsStatus     string `json:"REDStatus"`            // RED指标告警
+	LogMetricsStatus     string `json:"logsStatus"`           // 日志指标告警
 	InfrastructureStatus string `json:"infrastructureStatus"` // 基础设施告警
 	NetStatus            string `json:"netStatus"`            // 网络告警
 	K8sStatus            string `json:"k8sStatus"`            // K8s状态告警
@@ -24,14 +25,19 @@ var NORMAL_ALERT_STATUS = AlertStatus{
 		InfrastructureStatus: STATUS_NORMAL,
 		NetStatus:            STATUS_NORMAL,
 		K8sStatus:            STATUS_NORMAL,
+		REDMetricsStatus:     STATUS_NORMAL,
+		LogMetricsStatus:     STATUS_NORMAL,
 	},
-	AlertStatusPROM: AlertStatusPROM{
-		LogMetricsStatus: STATUS_NORMAL,
-	},
+	AlertStatusPROM: AlertStatusPROM{},
 }
 
+// AlertStatus 告警状态
+// 按数据来源分组只是为了统一管理
+// 目前没有依赖于Prometheus数据的告警
 type AlertStatus struct {
+	// AlertStatusCH 基于clickhouse数据计算的告警
 	AlertStatusCH
+	// AlertStatusPROM 基于prometheus数据计算的告警
 	AlertStatusPROM
 }
 

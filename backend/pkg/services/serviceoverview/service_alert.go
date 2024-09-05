@@ -244,6 +244,8 @@ func GetAlertStatusCH(chRepo clickhouse.Repo, alertReason *model.AlertReason,
 	startTime, endTime time.Time,
 ) (alertStatus model.AlertStatusCH) {
 	alertStatus = model.AlertStatusCH{
+		REDMetricsStatus:     model.STATUS_NORMAL,
+		LogMetricsStatus:     model.STATUS_NORMAL,
 		InfrastructureStatus: model.STATUS_NORMAL,
 		NetStatus:            model.STATUS_NORMAL,
 		K8sStatus:            model.STATUS_NORMAL,
@@ -273,8 +275,24 @@ func GetAlertStatusCH(chRepo clickhouse.Repo, alertReason *model.AlertReason,
 					AlertReason:  event.Name,
 					AlertMessage: event.Detail,
 				})
+			case clickhouse.APP_GROUP:
+				alertStatus.REDMetricsStatus = model.STATUS_CRITICAL
+				alertReason.Add(model.REDMetricsAlert, model.AlertDetail{
+					Timestamp:    event.ReceivedTime.UnixMicro(),
+					AlertObject:  event.GetTargetObj(),
+					AlertReason:  event.Name,
+					AlertMessage: event.Detail,
+				})
+			case clickhouse.LOG_GROUP:
+				alertStatus.LogMetricsStatus = model.STATUS_CRITICAL
+				alertReason.Add(model.LogMetricsAlert, model.AlertDetail{
+					Timestamp:    event.ReceivedTime.UnixMicro(),
+					AlertObject:  event.GetTargetObj(),
+					AlertReason:  event.Name,
+					AlertMessage: event.Detail,
+				})
 			default:
-				// 忽略 app 和 container 告警
+				// 忽略 container 告警
 				continue
 			}
 		}

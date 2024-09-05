@@ -16,6 +16,9 @@ const (
 	NETWORK_GROUP   = "network"
 	CONTAINER_GROUP = "container"
 	INFRA_GROUP     = "infra"
+
+	// TODO 新建一个日志指标告警组
+	LOG_GROUP = "log"
 )
 
 const (
@@ -110,17 +113,17 @@ func (ch *chRepo) GetAlertEvents(startTime time.Time, endTime time.Time, filter 
 func extractFilter(filter request.AlertFilter, instances []*model.ServiceInstance) *whereSQL {
 	var whereInstance []*whereSQL
 	if len(filter.Group) == 0 || filter.Group == "app" {
-		whereGroup := EqualsIfNotEmpty("group", "app")
+		whereGroup := Equals("group", "app")
 		whereInstance = append(whereInstance, MergeWheres(
 			AndSep,
 			whereGroup,
 			Equals("tags['svc_name']", filter.Service),
-			Equals("tags['content_key']", filter.Endpoint),
+			EqualsIfNotEmpty("tags['content_key']", filter.Endpoint),
 		))
 	}
 
 	if len(filter.Group) == 0 || filter.Group == "container" {
-		whereGroup := EqualsIfNotEmpty("group", "container")
+		whereGroup := Equals("group", "container")
 		var k8sPods ValueInGroups = ValueInGroups{
 			Keys: []string{"tags['namespace']", "tags['pod']"},
 		}
@@ -143,7 +146,7 @@ func extractFilter(filter request.AlertFilter, instances []*model.ServiceInstanc
 	}
 
 	if len(filter.Group) == 0 || filter.Group == "network" {
-		whereGroup := EqualsIfNotEmpty("group", "network")
+		whereGroup := Equals("group", "network")
 		var k8sPods ValueInGroups = ValueInGroups{
 			Keys: []string{"tags['src_namespace']", "tags['src_pod']"},
 		}
@@ -175,7 +178,7 @@ func extractFilter(filter request.AlertFilter, instances []*model.ServiceInstanc
 	}
 
 	if len(filter.Group) == 0 || filter.Group == "infra" {
-		whereGroup := EqualsIfNotEmpty("group", "infra")
+		whereGroup := Equals("group", "infra")
 		var tmpSet = map[string]struct{}{}
 		var nodes clickhouse.ArraySet
 		for _, instance := range instances {
@@ -193,6 +196,39 @@ func extractFilter(filter request.AlertFilter, instances []*model.ServiceInstanc
 			AndSep,
 			whereGroup,
 			In("tags['instance_name']", nodes),
+		))
+	}
+
+	if len(filter.Group) == 0 || filter.Group == "log" {
+		whereGroup := Equals("group", "log")
+		var k8sPods ValueInGroups = ValueInGroups{
+			Keys: []string{"tags['namespace']", "tags['pod']"},
+		}
+		// TODO check log AlertEvent tags for vm
+		var vmPods ValueInGroups = ValueInGroups{
+			Keys: []string{"tags['node']", "tags['pid']"},
+		}
+
+		for _, instance := range instances {
+			if instance == nil {
+				continue
+			}
+			if len(instance.PodName) > 0 {
+				k8sPods.ValueGroups = append(k8sPods.ValueGroups, clickhouse.GroupSet{
+					Value: []any{instance.Namespace, instance.PodName},
+				})
+			} else {
+				vmPods.ValueGroups = append(vmPods.ValueGroups, clickhouse.GroupSet{
+					Value: []any{instance.NodeName, instance.Pid},
+				})
+			}
+		}
+
+		k8sOrVm := MergeWheres(OrSep, InGroup(k8sPods), InGroup(vmPods))
+		whereInstance = append(whereInstance, MergeWheres(
+			AndSep,
+			whereGroup,
+			k8sOrVm,
 		))
 	}
 
