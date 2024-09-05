@@ -25,10 +25,10 @@ const (
 	// SQL_GET_SAMPLE_ALERT_EVENT 按alarm_event的name分组,每组取发生事件最晚的记录,并在返回结果中记录同name的告警次数数量
 	SQL_GET_SAMPLE_ALERT_EVENT = `WITH grouped_alarm AS (
 		SELECT source,group,id,create_time,update_time,end_time,received_time,severity,name,detail,tags,status,
-        	arrayStringConcat(arrayMap(x -> x.2, arraySort(arrayZip(mapKeys(tags), mapValues(tags)))), ', ') AS alert_key,
+			arrayStringConcat(arrayMap(x -> x.2, arraySort(arrayZip(mapKeys(tags), mapValues(tags)))), ', ') AS alert_key,
 			ROW_NUMBER() OVER (PARTITION BY name, alert_key ORDER BY received_time) AS rn,
 			COUNT(*) OVER (PARTITION BY name, alert_key) AS alarm_count
-    	FROM alert_event
+		FROM alert_event
 		%s
 	)
 	SELECT *
