@@ -3,9 +3,11 @@ package clickhouse
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/CloudDetail/apo/backend/pkg/model"
+	"github.com/google/uuid"
 )
 
 const (
@@ -119,4 +121,55 @@ func (e *K8sEvents) GetReason() string {
 		return e.LogAttributes["k8s.event.reason"]
 	}
 	return "unknown"
+}
+
+func (e *K8sEvents) GetAlertEventSeverityLevel() model.SeverityLevel {
+	level := strings.ToLower(e.SeverityText)
+	switch level {
+	case "normal":
+		return model.SeverityLevelInfo
+	case "warning":
+		return model.SeverityLevelWarning
+	case "error":
+		return model.SeverityLevelError
+	case "fatel":
+		return model.SeverityLevelCritical
+	}
+	return model.SeverityLevelInfo
+}
+
+func (e *K8sEvents) ConvertToAlertEvent() *model.AlertEvent {
+	// turn e.LogAttributes["k8s.event.uid"] into ID
+	uuidStr := e.LogAttributes["k8s.event.uid"]
+	id, err := uuid.Parse(uuidStr)
+	if err != nil {
+		id = uuid.New()
+	}
+
+	alertEvent := &model.AlertEvent{
+		Source: "k8s",
+		ID:     id,
+		// TODO turn e.LogAttributes["k8s.event.start_time"] into CreateTime
+		CreateTime:   time.Time{},
+		UpdateTime:   time.Time{},
+		EndTime:      time.Time{},
+		ReceivedTime: e.Timestamp,
+		Severity:     e.GetAlertEventSeverityLevel(),
+		Group:        "k8s",
+		Name:         e.LogAttributes["k8s.event.reason"],
+		Detail:       e.Body,
+		Tags: map[string]string{
+			"alertGroup":         "k8s",
+			"k8s.event.reason":   e.LogAttributes["k8s.event.reason"],
+			"k8s.event.action":   e.LogAttributes["k8s.event.action"],
+			"k8s.namespace.name": e.LogAttributes["k8s.namespace.name"],
+		},
+		Status: model.StatusFiring,
+	}
+
+	for key, value := range e.ResourceAttributes {
+		alertEvent.Tags[key] = value
+	}
+
+	return alertEvent
 }
