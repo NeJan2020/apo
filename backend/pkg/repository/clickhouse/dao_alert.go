@@ -3,7 +3,9 @@ package clickhouse
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 
@@ -80,6 +82,7 @@ const (
 )
 
 // GetAlertEventCountGroupByInstance 快速查询每个Instance关联的告警数量(按告警级别分别计数)
+// !!! 允许instance为空,表示不做限制
 func (ch *chRepo) GetAlertEventCountGroupByInstance(startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance) ([]model.AlertEventCount, error) {
 	builder := NewQueryBuilder().
 		Between("received_time", startTime.Unix(), endTime.Unix()).
@@ -109,7 +112,8 @@ func (ch *chRepo) GetAlertEventCountGroupByInstance(startTime time.Time, endTime
 	return events, err
 }
 
-// GetAlarmsEvents 获取实例所有的告警事件
+// GetAlertEventsSample 获取实例的告警事件采样,每种告警采样sampleCount个
+// instances为空时,不返回任何告警
 func (ch *chRepo) GetAlertEventsSample(sampleCount int, startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance) ([]AlertEventSample, error) {
 	// 组合生成:
 	//  1. group = 'app' AND svc = svc_name
@@ -139,7 +143,19 @@ func (ch *chRepo) GetAlertEventsSample(sampleCount int, startTime time.Time, end
 	return events, err
 }
 
-func (ch *chRepo) GetAlertEvents(startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance, pageParam *request.PageParam) ([]PagedAlertEvent, int, error) {
+var (
+	GroupOrders = NewByLimitBuilder().
+			OrderBy("group", true).
+			OrderBy("name", true).
+			OrderBy("received_time", false).String()
+
+	ReceivedTimeOrders = NewByLimitBuilder().
+				OrderBy("received_time", false).String()
+)
+
+// GetAlertEvents 取出时间范围内的输入实例的所有告警事件
+// instances为空时,不返回任何告警
+func (ch *chRepo) GetAlertEvents(startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance, pageParam *request.PageParam, sortBy string) ([]PagedAlertEvent, int, error) {
 	whereInstance := extractFilter(filter, instances)
 
 	builder := NewQueryBuilder().
@@ -152,12 +168,7 @@ func (ch *chRepo) GetAlertEvents(startTime time.Time, endTime time.Time, filter 
 		EqualsNotEmpty("status", filter.Status).
 		And(whereInstance)
 
-	// HACK 基于窗口函数实现数据分页,和不同查询语句不同
-	// !!! 该位置不得添加Limit / Group 参数
-	orderBuilder := NewByLimitBuilder().
-		OrderBy("group", true).
-		OrderBy("name", true).
-		OrderBy("received_time", false)
+	orderBuilder := extractOrderParam(sortBy)
 	orders := orderBuilder.String()
 
 	sql := fmt.Sprintf(SQL_GET_PAGED_ALERT_EVENT, orders, builder.String(), RnLimit(pageParam))
@@ -287,4 +298,66 @@ func RnLimit(p *request.PageParam) string {
 	startIdx := 1 + (p.CurrentPage-1)*p.PageSize
 	endIdx := p.CurrentPage * p.PageSize
 	return fmt.Sprintf(" WHERE rn BETWEEN %d AND %d ", startIdx, endIdx)
+}
+
+const (
+	OrderAlertByGroupName    = "group,name,-receivedTime"
+	OrderAlertByReceivedTime = "receivedTime,group,name"
+)
+
+// 常用排序
+// orderAlertByGroupName
+// orderAlertByReceivedTime
+var (
+	orderAlertByGroupName = NewByLimitBuilder().
+				OrderBy("group", true).
+				OrderBy("name", true).
+				OrderBy("received_time", false)
+	orderAlertByReceivedTime = NewByLimitBuilder().
+					OrderBy("received_time", false).
+					OrderBy("group", true).
+					OrderBy("name", true)
+)
+
+// extractOrderParam 解析排序参数
+func extractOrderParam(sortBy string) *ByLimitBuilder {
+	if sortBy == OrderAlertByGroupName {
+		return orderAlertByGroupName
+	} else if sortBy == OrderAlertByReceivedTime {
+		return orderAlertByReceivedTime
+	} else if len(sortBy) == 0 {
+		return NewByLimitBuilder()
+	}
+
+	builder := NewByLimitBuilder()
+	parts := strings.Split(sortBy, ",")
+	for _, part := range parts {
+		key := strings.TrimSpace(part)
+		if strings.HasPrefix(key, "-") {
+			builder.OrderBy(camelToSnake(strings.TrimPrefix(key, "-")), false)
+		} else if strings.HasPrefix(key, "+") {
+			builder.OrderBy(camelToSnake(strings.TrimPrefix(key, "+")), true)
+		} else {
+			builder.OrderBy(camelToSnake(key), true)
+		}
+	}
+	return builder
+}
+
+func camelToSnake(s string) string {
+	var result []rune
+	for i, r := range s {
+		// 如果是大写字母，且不是第一个字符，添加下划线
+		if unicode.IsUpper(r) {
+			// 非首字母加下划线
+			if i > 0 {
+				result = append(result, '_')
+			}
+			// 转换为小写字母
+			result = append(result, unicode.ToLower(r))
+		} else {
+			result = append(result, r)
+		}
+	}
+	return string(result)
 }

@@ -127,8 +127,9 @@ type GetRygLightRequest struct {
 }
 
 type GetAlertEventsRequest struct {
-	StartTime int64 `form:"startTime" binding:"required"`                 // 查询开始时间
-	EndTime   int64 `form:"endTime" binding:"required,gtfield=StartTime"` // 查询结束时间
+	StartTime int64  `form:"startTime" binding:"required"`                 // 查询开始时间
+	EndTime   int64  `form:"endTime" binding:"required,gtfield=StartTime"` // 查询结束时间
+	SortBy    string `form:"sortBy"`                                       // 排序参数
 
 	AlertFilter // 过滤参数
 	*PageParam  // 分页参数

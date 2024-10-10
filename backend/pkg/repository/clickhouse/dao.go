@@ -80,7 +80,7 @@ type Repo interface {
 	// 查询按labels采样的告警事件,sampleCount为每个labels采样的数量
 	GetAlertEventsSample(sampleCount int, startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance) ([]AlertEventSample, error)
 	// 查询按pageParam分页的告警事件
-	GetAlertEvents(startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance, pageParam *request.PageParam) ([]PagedAlertEvent, int, error)
+	GetAlertEvents(startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance, pageParam *request.PageParam, sortBy string) ([]PagedAlertEvent, int, error)
 
 	// ========== k8s events ============
 	// SeverityNumber > 9 (warning)

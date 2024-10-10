@@ -55,12 +55,17 @@ func (s *service) GetAlertEvents(req *request.GetAlertEventsRequest) (*response.
 	startTime := time.UnixMicro(req.StartTime)
 	endTime := time.UnixMicro(req.EndTime)
 
+	if len(req.SortBy) == 0 {
+		req.SortBy = clickhouse.OrderAlertByGroupName
+	}
+
 	// 查询实例的AlertEvent
 	events, totalCount, err := s.chRepo.GetAlertEvents(
 		startTime, endTime,
 		req.AlertFilter,
 		instances.GetInstances(),
 		req.PageParam,
+		req.SortBy,
 	)
 	if err != nil {
 		return nil, err
