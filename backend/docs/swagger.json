@@ -169,8 +169,8 @@
                 }
             }
         },
-        "/api/alerts/impact": {
-            "post": {
+        "/api/alerts/event/impact": {
+            "get": {
                 "description": "获取告警数据的影响面",
                 "consumes": [
                     "application/x-www-form-urlencoded"

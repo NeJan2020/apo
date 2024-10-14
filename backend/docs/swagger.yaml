@@ -1938,8 +1938,8 @@ paths:
       summary: 列出告警通知对象
       tags:
       - API.alerts
-  /api/alerts/impact:
-    post:
+  /api/alerts/event/impact:
+    get:
       consumes:
       - application/x-www-form-urlencoded
       description: 获取告警数据的影响面

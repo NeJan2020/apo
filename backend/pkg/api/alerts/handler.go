@@ -15,7 +15,7 @@ type Handler interface {
 
 	// AlertImpact 获取告警数据的影响面
 	// @Tags API.alerts
-	// @Router /api/alerts/impact [post]
+	// @Router /api/alerts/event/impact [get]
 	AlertImpact() core.HandlerFunc
 
 	// ========================告警配置========================
