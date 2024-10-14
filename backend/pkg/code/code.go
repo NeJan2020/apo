@@ -94,6 +94,10 @@ const (
 	AlertManagerReceiverEmailFromMissing    = "B0724"
 	AlertManagerEmptyReceiver               = "B0725"
 	AlertManagerDefaultReceiverCannotDelete = "B0726"
+
+	// Alert Analyze
+	AlertEventImpactError      = "B0801"
+	AlertEventImpactMissingTag = "B0802"
 )
 
 func Text(code string) string {

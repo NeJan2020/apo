@@ -31,7 +31,8 @@ type Repo interface {
 	ListDescendantRelations(req *request.GetServiceEndpointTopologyRequest) ([]ToplogyRelation, error)
 	// 查询入口节点列表
 	ListEntryEndpoints(req *request.GetServiceEntryEndpointsRequest) ([]EntryNode, error)
-
+	// 根据Endpoint查询入口节点
+	SearchEntryEndpointsByAlertService(endpoints []AlertService, startTime, endTime int64) ([]EntryNode, error)
 	// ========== error_propagation ==========
 	// 查询实例相关的错误传播链
 	ListErrorPropagation(req *request.GetErrorInstanceRequest) ([]ErrorInstancePropagation, error)
@@ -81,6 +82,8 @@ type Repo interface {
 	GetAlertEventsSample(sampleCount int, startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance) ([]AlertEventSample, error)
 	// 查询按pageParam分页的告警事件
 	GetAlertEvents(startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance, pageParam *request.PageParam, sortBy string) ([]PagedAlertEvent, int, error)
+	// 查询指定EventId的告警事件
+	GetAlertEventById(eventId string, startTime, endTime time.Time) (*model.AlertEvent, error)
 
 	// ========== k8s events ============
 	// SeverityNumber > 9 (warning)

@@ -79,6 +79,9 @@ const (
 	SELECT *
 	FROM paginatedEvent
 	%s ORDER BY rn`
+
+	SQL_GET_ALERT_EVENT = `SELECT source,group,id,create_time,update_time,end_time,received_time,severity,name,detail,tags,status
+	FROM alert_event %s %s`
 )
 
 // GetAlertEventCountGroupByInstance 快速查询每个Instance关联的告警数量(按告警级别分别计数)
@@ -179,6 +182,19 @@ func (ch *chRepo) GetAlertEvents(startTime time.Time, endTime time.Time, filter 
 		total_count = int(events[0].TotalCount)
 	}
 	return events, total_count, err
+}
+
+func (ch *chRepo) GetAlertEventById(eventId string, startTime, endTime time.Time) (*model.AlertEvent, error) {
+	builder := NewQueryBuilder().
+		Between("received_time", startTime.Unix(), endTime.Unix()).
+		Equals("id", eventId)
+
+	byLimit := NewByLimitBuilder().Limit(1)
+
+	sql := fmt.Sprintf(SQL_GET_ALERT_EVENT, builder.String(), byLimit.String())
+	var event model.AlertEvent
+	err := ch.conn.Select(context.Background(), &event, sql, builder.values...)
+	return &event, err
 }
 
 func extractFilter(filter request.AlertFilter, instances []*model.ServiceInstance) *whereSQL {

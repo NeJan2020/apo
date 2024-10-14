@@ -7,9 +7,19 @@ import (
 	"github.com/CloudDetail/apo/backend/pkg/repository/clickhouse"
 	"github.com/CloudDetail/apo/backend/pkg/repository/kubernetes"
 	"github.com/CloudDetail/apo/backend/pkg/services/alerts"
+	"github.com/CloudDetail/apo/backend/pkg/services/serviceoverview"
 )
 
 type Handler interface {
+	// ========================告警分析========================
+
+	// AlertImpact 获取告警数据的影响面
+	// @Tags API.alerts
+	// @Router /api/alerts/impact [post]
+	AlertImpact() core.HandlerFunc
+
+	// ========================告警配置========================
+
 	// InputAlertManager 获取 AlertManager 的告警事件
 	// @Tags API.alerts
 	// @Router /api/alerts/inputs/alertmanager [post]
@@ -81,8 +91,9 @@ type Handler interface {
 }
 
 type handler struct {
-	logger       *zap.Logger
-	alertService alerts.Service
+	logger                 *zap.Logger
+	alertService           alerts.Service
+	serviceoverviewService serviceoverview.Service
 }
 
 func New(logger *zap.Logger, chRepo clickhouse.Repo, k8sRepo kubernetes.Repo) Handler {

@@ -87,4 +87,7 @@ var zhCnText = map[string]string{
 	AlertManagerReceiverEmailFromMissing:    "告警通知对象 email 'from' 配置缺失",
 	AlertManagerEmptyReceiver:               "告警通知对象没有设置任何 webhook 或 email 配置",
 	AlertManagerDefaultReceiverCannotDelete: "默认告警通知对象不能被删除",
+
+	AlertEventImpactError:      "查询告警事件影响面失败",
+	AlertEventImpactMissingTag: "查询告警事件影响面失败, 事件标签中未找到任意可关联标签组",
 }

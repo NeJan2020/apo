@@ -46,6 +46,35 @@ func (a *AlertEvent) GetTargetObj() string {
 	return ""
 }
 
+func (a *AlertEvent) GetServiceNameTag() string {
+	return a.Tags["svc_name"]
+}
+
+func (a *AlertEvent) GetContentKeyTag() string {
+	return a.Tags["content_key"]
+}
+
+// GetLevelTag 获取级别,当前只有network告警存在
+func (a *AlertEvent) GetLevelTag() string {
+	return a.Tags["level"]
+}
+
+func (a *AlertEvent) GetNetSrcNodeTag() string {
+	return a.Tags["node"]
+}
+
+func (a *AlertEvent) GetK8sNamespaceTag() string {
+	return a.Tags["namespace"]
+}
+
+func (a *AlertEvent) GetK8sPodTag() string {
+	return a.Tags["pod"]
+}
+
+func (a *AlertEvent) GetInfraNodeTag() string {
+	return a.Tags["instance_name"]
+}
+
 func GenUUID() uuid.UUID {
 	return uuid.New()
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/CloudDetail/apo/backend/pkg/model/request"
 )
 
@@ -105,6 +106,45 @@ func (ch *chRepo) ListEntryEndpoints(req *request.GetServiceEntryEndpointsReques
 	if err := ch.conn.Select(context.Background(), &results, sql, queryBuilder.values...); err != nil {
 		return nil, err
 	}
+	return results, nil
+}
+
+// AlertService 告警节点,作为查询入口节点的参数
+type AlertService struct {
+	ServiceName string
+	// 当ContentKey为空时,表示忽略ContentKey
+	// 当ContentKey不为空时，表示只查询对应ContentKey的数据,用于App Alert时更准确的定位入口节点
+	ContentKey string
+}
+
+func (ch *chRepo) SearchEntryEndpointsByAlertService(
+	endpoints []AlertService,
+	startTime, endTime int64,
+) ([]EntryNode, error) {
+	// microseconds -> seconds
+	startTime = startTime / 1000000
+	endTime = endTime / 1000000
+
+	var svcEndpoints = ValueInGroups{
+		Keys: []string{"nodes.service", "nodes.url"},
+	}
+
+	for _, endpoint := range endpoints {
+		svcEndpoints.ValueGroups = append(svcEndpoints.ValueGroups, clickhouse.GroupSet{
+			Value: []any{endpoint.ServiceName, endpoint.ContentKey},
+		})
+	}
+
+	queryBuilder := NewQueryBuilder().
+		Between("timestamp", startTime, endTime).
+		And(InGroup(svcEndpoints))
+
+	results := []EntryNode{}
+	sql := fmt.Sprintf(SQL_GET_ENTRY_NODES, queryBuilder.String())
+	if err := ch.conn.Select(context.Background(), &results, sql, queryBuilder.values...); err != nil {
+		return nil, err
+	}
+
 	return results, nil
 }
 

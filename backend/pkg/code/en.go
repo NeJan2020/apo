@@ -84,4 +84,7 @@ var enText = map[string]string{
 	AlertManagerReceiverEmailFromMissing:    "alertManager receiver email 'from' missing",
 	AlertManagerEmptyReceiver:               "alertManager receiver neither set webhook nor set email config",
 	AlertManagerDefaultReceiverCannotDelete: "alertManager default receiver cannot be deleted",
+
+	AlertEventImpactError:      "Failed to get alert event impact",
+	AlertEventImpactMissingTag: "Failed to get alert event impact, event missing tag ",
 }

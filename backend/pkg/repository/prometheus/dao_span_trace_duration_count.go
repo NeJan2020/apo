@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
@@ -40,6 +41,27 @@ func (repo *promRepo) GetServiceList(startTime int64, endTime int64) ([]string, 
 		result = append(result, string(sample.Metric["svc_name"]))
 	}
 	return result, nil
+}
+
+func (repo *promRepo) GetServiceListByFilter(startTime time.Time, endTime time.Time, filterKVs ...string) ([]string, error) {
+	if len(filterKVs)%2 != 0 {
+		return nil, fmt.Errorf("size of filterKVs is not even: %d", len(filterKVs))
+	}
+	var filters []string
+	for i := 0; i+1 < len(filterKVs); i += 2 {
+		filters = append(filters, fmt.Sprintf("%s\"%s\"", filterKVs[i], filterKVs[i+1]))
+	}
+
+	pql := fmt.Sprintf(TEMPLATE_GET_SERVICES, strings.Join(filters, ","))
+	ress, err := repo.QueryRangeData(startTime, endTime, pql, time.Second*15)
+	if err != nil {
+		return nil, err
+	}
+	var services []string
+	for _, res := range ress {
+		services = append(services, res.Metric.SvcName)
+	}
+	return services, nil
 }
 
 // GetServiceEndPointList 查询服务Endpoint列表, 服务名允许为空

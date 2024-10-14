@@ -5,11 +5,20 @@ import (
 	"github.com/CloudDetail/apo/backend/pkg/model/response"
 	"github.com/CloudDetail/apo/backend/pkg/repository/clickhouse"
 	"github.com/CloudDetail/apo/backend/pkg/repository/kubernetes"
+	"github.com/CloudDetail/apo/backend/pkg/repository/prometheus"
 )
 
 var _ Service = (*service)(nil)
 
 type Service interface {
+	// ========================告警分析========================
+
+	// AlertImpact 获取告警事件的影响面
+	// 如果关联所需的Label不足,error会返回ErrAlertImpactMissingTag提示期望哪些tag
+	AlertImpact(eventid string, startTime, endTime int64) ([]clickhouse.EntryNode, error)
+
+	// ========================告警配置========================
+
 	// InputAlertManager 接收 AlertManager 的告警事件
 	InputAlertManager(req *request.InputAlertManagerRequest) error
 
@@ -38,7 +47,9 @@ type Service interface {
 
 type service struct {
 	chRepo clickhouse.Repo
-	k8sApi kubernetes.Repo
+	// TODO init promRepo
+	promRepo prometheus.Repo
+	k8sApi   kubernetes.Repo
 }
 
 func New(chRepo clickhouse.Repo, k8sApi kubernetes.Repo) Service {
