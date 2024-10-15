@@ -37,6 +37,6 @@ type AnormalEventDetail struct {
 }
 
 type EndpointKey struct {
-	ServiceName string
-	ContentKey  string
+	ServiceName string `json:"serviceName"`
+	ContentKey  string `json:"contentKey"`
 }
