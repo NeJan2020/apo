@@ -6,6 +6,10 @@ import (
 	"github.com/CloudDetail/apo/backend/pkg/model/request"
 )
 
+type GetDescendantAnormalEventResponse struct {
+	AnormalEvents []model.AnormalEvent `json:"anormalEvents"`
+}
+
 type GetAlertRuleFileResponse struct {
 	AlertRules map[string]string `json:"alertRules"`
 }

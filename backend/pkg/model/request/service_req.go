@@ -21,6 +21,8 @@ type GetDescendantMetricsRequest struct {
 	EntryEndpoint string `form:"entryEndpoint"`                                // 入口Endpoint
 }
 
+type GetDescendantAnormalEventRequest = GetDescendantMetricsRequest
+
 type GetPolarisInferRequest struct {
 	StartTime int64  `form:"startTime" binding:"min=0"`                    // 查询开始时间
 	EndTime   int64  `form:"endTime" binding:"required,gtfield=StartTime"` // 查询结束时间

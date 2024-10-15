@@ -20,6 +20,11 @@ type Handler interface {
 	// @Router /api/alerts/event/impact [get]
 	AlertImpact() core.HandlerFunc
 
+	// GetDescendantAnormalEvent 获取下游告警事件
+	// @Tags API.alerts
+	// @Router /api/alerts/descendant/anormal [get]
+	GetDescendantAnormalEvent() core.HandlerFunc
+
 	// ========================告警配置========================
 
 	// InputAlertManager 获取 AlertManager 的告警事件

@@ -17,6 +17,9 @@ type Service interface {
 	// 如果关联所需的Label不足,error会返回ErrAlertImpactMissingTag提示期望哪些tag
 	AlertImpact(eventid string, startTime, endTime int64) ([]clickhouse.EntryNode, error)
 
+	// SearchAnormalEventByEntry 查询入口节点下游的异常事件
+	SearchAnormalEventByEntry(req *request.GetDescendantAnormalEventRequest) (*response.GetDescendantAnormalEventResponse, error)
+
 	// ========================告警配置========================
 
 	// InputAlertManager 接收 AlertManager 的告警事件
