@@ -109,6 +109,7 @@ func setApiRouter(r *resource) {
 		alertApi.DELETE("/alertmanager/receiver", alertHandler.DeleteAlertManagerConfigReceiver())
 
 		alertApi.GET("/event/impact", alertHandler.AlertImpact())
+		alertApi.GET("/descendant/anormal", alertHandler.GetDescendantAnormalEvent())
 	}
 
 	configApi := r.mux.Group("/api/config")

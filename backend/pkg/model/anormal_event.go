@@ -20,12 +20,12 @@ type AnormalEvent struct {
 	// 异常类型
 	AnormalType AnormalType `json:"anormalType"`
 	// 受异常影响的端点
-	ImpactEndpoints map[EndpointKey]AnormalEventDetail `json:"impactEndpoints"`
-
-	RawEvent any `json:"raw"`
+	ImpactEndpoints []AnormalEventDetail `json:"impactEndpoints"`
 }
 
 type AnormalEventDetail struct {
+	EndpointKey
+
 	// 影响的实例
 	AlertObject string `json:"alertObject"`
 

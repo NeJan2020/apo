@@ -102,7 +102,7 @@ func (ch *chRepo) GetAlertEventCountGroupByInstance(startTime time.Time, endTime
 		//  2. group = 'container' AND ((namespace,pod) in (...))
 		//  3. group = 'network' AND ((src_namespace,pod) in (...) OR (src_node,pid) in (...))
 		//  4. group = 'infra' AND ((instance_name) in (...))
-		whereInstance := extractFilter(filter, instances)
+		whereInstance := extractFilter(filter, nil, instances)
 		builder.And(whereInstance)
 	}
 
@@ -123,7 +123,7 @@ func (ch *chRepo) GetAlertEventsSample(sampleCount int, startTime time.Time, end
 	//  2. group = 'container' AND ((namespace,pod) in (...))
 	//  3. group = 'network' AND ((src_namespace,pod) in (...) OR (src_node,pid) in (...))
 	//  4. group = 'infra' AND ((instance_name) in (...))
-	whereInstance := extractFilter(filter, instances)
+	whereInstance := extractFilter(filter, nil, instances)
 
 	builder := NewQueryBuilder().
 		Between("received_time", startTime.Unix(), endTime.Unix()).
@@ -159,8 +159,18 @@ var (
 // GetAlertEvents 取出时间范围内的输入实例的所有告警事件
 // instances为空时,不返回任何告警
 func (ch *chRepo) GetAlertEvents(startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance, pageParam *request.PageParam, sortBy string) ([]PagedAlertEvent, int, error) {
-	whereInstance := extractFilter(filter, instances)
+	whereInstance := extractFilter(filter, nil, instances)
+	return ch.getAlertEventsByWhere(startTime, endTime, filter, whereInstance, sortBy, pageParam)
+}
 
+// GetAlertEvents 取出时间范围内的输入实例的所有告警事件
+// instances为空时,不返回任何告警
+func (ch *chRepo) GetAlertEventsByInstanceAndEndpoints(startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance, endpoints []model.EndpointKey, pageParam *request.PageParam, sortBy string) ([]PagedAlertEvent, int, error) {
+	whereInstance := extractFilter(filter, endpoints, instances)
+	return ch.getAlertEventsByWhere(startTime, endTime, filter, whereInstance, sortBy, pageParam)
+}
+
+func (ch *chRepo) getAlertEventsByWhere(startTime time.Time, endTime time.Time, filter request.AlertFilter, whereInstance *whereSQL, sortBy string, pageParam *request.PageParam) ([]PagedAlertEvent, int, error) {
 	builder := NewQueryBuilder().
 		Between("received_time", startTime.Unix(), endTime.Unix()).
 		EqualsNotEmpty("source", filter.Source).
@@ -202,16 +212,32 @@ func (ch *chRepo) GetAlertEventById(eventId string, startTime, endTime time.Time
 	return &event[0], err
 }
 
-func extractFilter(filter request.AlertFilter, instances []*model.ServiceInstance) *whereSQL {
+func extractFilter(filter request.AlertFilter, endpoints []model.EndpointKey, instances []*model.ServiceInstance) *whereSQL {
 	var whereInstance []*whereSQL
 	if len(filter.Group) == 0 || filter.Group == "app" {
 		whereGroup := EqualsIfNotEmpty("group", "app")
-		whereInstance = append(whereInstance, MergeWheres(
-			AndSep,
-			whereGroup,
-			Equals("tags['svc_name']", filter.Service),
-			EqualsIfNotEmpty("tags['content_key']", filter.Endpoint),
-		))
+		if len(endpoints) == 0 {
+			whereInstance = append(whereInstance, MergeWheres(
+				AndSep,
+				whereGroup,
+				Equals("tags['svc_name']", filter.Service),
+				EqualsIfNotEmpty("tags['content_key']", filter.Endpoint),
+			))
+		} else {
+			whereEndpoints := ValueInGroups{
+				Keys: []string{"tags['svc_name']", "tags['content_key']"},
+			}
+			for _, endpoint := range endpoints {
+				whereEndpoints.ValueGroups = append(whereEndpoints.ValueGroups, clickhouse.GroupSet{
+					Value: []any{endpoint.ServiceName, endpoint.ContentKey},
+				})
+			}
+			whereInstance = append(whereInstance, MergeWheres(
+				AndSep,
+				whereGroup,
+				InGroup(whereEndpoints),
+			))
+		}
 	}
 
 	if len(filter.Group) == 0 || filter.Group == "container" {

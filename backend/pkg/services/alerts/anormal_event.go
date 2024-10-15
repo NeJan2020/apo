@@ -16,13 +16,19 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 	startTime := time.UnixMicro(req.StartTime)
 	endTime := time.UnixMicro(req.EndTime)
 
-	descendants, err := s.chRepo.ListDescendantNodes(req)
+	descendants, err := s.chRepo.ListDescendantNodes(&request.GetDescendantMetricsRequest{
+		StartTime: req.StartTime,
+		EndTime:   req.EndTime,
+		Service:   req.Service,
+		Endpoint:  req.Endpoint,
+	})
 	if err != nil {
 		return nil, err
 	}
 
 	// 便于后续查询受告警影响的服务
 	var instances []*model.ServiceInstance
+	var endpoints []model.EndpointKey
 	instanceMap := InstanceMap{
 		Pod2InstanceMap:     map[K8sPodNSKey]model.ServiceInstance{},
 		NodePid2InstanceMap: map[NodePidKey]model.ServiceInstance{},
@@ -37,20 +43,22 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 		}
 
 		// 构建好子孙节点的Node/Service -> descendant 映射
-		instancesForDescendant := instanceList.GetInstances()
-		instanceMap.AddInstances(model.EndpointKey{
+		endpoint := model.EndpointKey{
 			ServiceName: descendant.Service,
 			ContentKey:  descendant.Endpoint,
-		}, instancesForDescendant)
+		}
+		instancesForDescendant := instanceList.GetInstances()
+		instanceMap.AddInstances(endpoint, instancesForDescendant)
 
 		instances = append(instances, instancesForDescendant...)
+		endpoints = append(endpoints, endpoint)
 	}
 
 	// 获取匹配的alertEvents
-	alertEvents, _, err := s.chRepo.GetAlertEvents(
+	alertEvents, _, err := s.chRepo.GetAlertEventsByInstanceAndEndpoints(
 		startTime, endTime,
 		request.AlertFilter{Status: "firing"},
-		instances, nil, ck.OrderAlertByReceivedTime,
+		instances, endpoints, nil, ck.OrderAlertByReceivedTime,
 	)
 
 	if err != nil {
@@ -63,20 +71,21 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 		var anormalEvent model.AnormalEvent = model.AnormalEvent{
 			Timestamp:       alertEvent.ReceivedTime.UnixMicro(),
 			AnormalType:     0,
-			ImpactEndpoints: map[model.EndpointKey]model.AnormalEventDetail{},
-			RawEvent:        alertEvent,
+			ImpactEndpoints: []model.AnormalEventDetail{},
+			// RawEvent:        alertEvent,
 		}
 		switch ck.AlertGroup(alertEvent.Group) {
 		case ck.APP_GROUP:
 			anormalEvent.AnormalType = model.AnormalTypeAlertApp
-			anormalEvent.ImpactEndpoints[model.EndpointKey{
-				ServiceName: alertEvent.GetServiceNameTag(),
-				ContentKey:  alertEvent.GetContentKeyTag(),
-			}] = model.AnormalEventDetail{
+			anormalEvent.ImpactEndpoints = append(anormalEvent.ImpactEndpoints, model.AnormalEventDetail{
+				EndpointKey: model.EndpointKey{
+					ServiceName: alertEvent.GetServiceNameTag(),
+					ContentKey:  alertEvent.GetContentKeyTag(),
+				},
 				AlertObject:  alertEvent.GetTargetObj(),
 				AlertReason:  alertEvent.Name,
 				AlertMessage: alertEvent.Detail,
-			}
+			})
 		case ck.CONTAINER_GROUP:
 			anormalEvent.AnormalType = model.AnormalTypeAlertContainer
 			instance, endpoints := instanceMap.GetEndpointsByK8sPodNS(alertEvent.GetK8sPodTag(), alertEvent.GetK8sNamespaceTag())
@@ -84,11 +93,12 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 				continue
 			}
 			for _, endpoint := range endpoints {
-				anormalEvent.ImpactEndpoints[endpoint] = model.AnormalEventDetail{
+				anormalEvent.ImpactEndpoints = append(anormalEvent.ImpactEndpoints, model.AnormalEventDetail{
+					EndpointKey:  endpoint,
 					AlertObject:  alertEvent.GetTargetObj(),
 					AlertReason:  alertEvent.Name,
 					AlertMessage: alertEvent.Detail,
-				}
+				})
 			}
 		case ck.NETWORK_GROUP:
 			anormalEvent.AnormalType = model.AnormalTypeAlertNet
@@ -107,11 +117,13 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 				}
 			}
 			for _, endpoint := range endpoints {
-				anormalEvent.ImpactEndpoints[endpoint] = model.AnormalEventDetail{
+
+				anormalEvent.ImpactEndpoints = append(anormalEvent.ImpactEndpoints, model.AnormalEventDetail{
+					EndpointKey:  endpoint,
 					AlertObject:  alertEvent.GetTargetObj(),
 					AlertReason:  alertEvent.Name,
 					AlertMessage: alertEvent.Detail,
-				}
+				})
 			}
 		case ck.INFRA_GROUP:
 			anormalEvent.AnormalType = model.AnormalTypeAlertInfra
@@ -124,11 +136,12 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 					instanceName = fmt.Sprintf("(pid:%d)", instance.Pid)
 				}
 				for _, endpoint := range endpoints {
-					anormalEvent.ImpactEndpoints[endpoint] = model.AnormalEventDetail{
+					anormalEvent.ImpactEndpoints = append(anormalEvent.ImpactEndpoints, model.AnormalEventDetail{
+						EndpointKey:  endpoint,
 						AlertObject:  instanceName + " at " + alertEvent.GetTargetObj(),
 						AlertReason:  alertEvent.Name,
 						AlertMessage: alertEvent.Detail,
-					}
+					})
 				}
 			}
 		}

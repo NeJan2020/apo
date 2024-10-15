@@ -92,4 +92,6 @@ var zhCnText = map[string]string{
 	AlertEventImpactMissingTag:       "查询告警事件影响面失败, 事件标签中未找到任意可关联标签组 ",
 	AlertEventImpactNoMatchedService: "查询告警事件影响面失败, 未找到告警事件匹配的服务 ",
 	AlertEventIDMissing:              "查询告警事件影响面失败, 搜索时间范围内未找到告警事件ID对应的事件 ",
+
+	AlertAnalyzeDescendantAnormalEventError: "分析告警事件失败: 查询下游异常事件失败",
 }

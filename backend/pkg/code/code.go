@@ -100,6 +100,8 @@ const (
 	AlertEventImpactMissingTag       = "B0728"
 	AlertEventImpactNoMatchedService = "B0729"
 	AlertEventIDMissing              = "B0730"
+
+	AlertAnalyzeDescendantAnormalEventError = "B0731"
 )
 
 func Text(code string) string {
