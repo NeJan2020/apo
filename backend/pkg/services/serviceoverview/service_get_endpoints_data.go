@@ -7,25 +7,28 @@ import (
 
 	"github.com/CloudDetail/apo/backend/pkg/model/response"
 	"github.com/CloudDetail/apo/backend/pkg/repository/database"
+	prom "github.com/CloudDetail/apo/backend/pkg/repository/prometheus"
 )
 
-func (s *service) GetServicesEndPointData(startTime time.Time, endTime time.Time, step time.Duration, filter EndpointsFilter, sortRule SortType) (res []response.ServiceEndPointsRes, err error) {
+func (s *service) GetServicesEndpointDataByFilter(startTime time.Time, endTime time.Time, step time.Duration, filter EndpointsFilter, sortRule SortType) (res []response.ServiceEndPointsRes, err error) {
 	var duration string
 	var stepNS = endTime.Sub(startTime).Nanoseconds()
 	duration = strconv.FormatInt(stepNS/int64(time.Minute), 10) + "m"
 
+	filters := extractEndpointFilters(filter)
+
 	// step1 查询满足Filter的Endpoint,并返回对应的RED指标
 	// RED指标包含了选定时间段内的平均值,日同比变化率和周同比变化率
-	endpointsMap := s.EndpointsREDMetric(startTime, endTime, filter)
+	endpointsMap := s.QueryEndpointsREDMetricByFilter(startTime, endTime, filters)
 
 	// step2 填充延时依赖关系
-	err = s.EndpointsDelaySource(endpointsMap, startTime, endTime, filter)
+	err = s.EndpointsDelaySource(endpointsMap, startTime, endTime, filters)
 	if err != nil {
 		// TODO 输出错误日志, DelaySource查询失败
 	}
 
 	// step2.. 填充Namespace信息
-	err = s.EndpointsNamespaceInfo(endpointsMap, startTime, endTime, filter)
+	err = s.EndpointsNamespaceInfo(endpointsMap, startTime, endTime, filters)
 	if err != nil {
 		// TODO 输出错误日志, Namespace查询失败
 	}
@@ -33,7 +36,81 @@ func (s *service) GetServicesEndPointData(startTime time.Time, endTime time.Time
 	// step3 根据排序规则对URL进行排序, 并填充前期未查询到的数据
 	if sortRule == MUTATIONSORT {
 		// 填充实时RED指标用于排序(当前时间往前3分钟之间的情况)
-		s.EndpointsRealtimeREDMetric(filter, endpointsMap, startTime, endTime)
+		s.EndpointsRealtimeREDMetric(filters, endpointsMap, startTime, endTime)
+	}
+	// 根据排序规则对endpoints进行排序并填充部分未查询到的数据
+	err = s.sortWithRule(sortRule, endpointsMap)
+
+	// step4 将Endpoints按service分组,并维持service排序
+	services := fillServices(endpointsMap.MetricGroupList)
+
+	// step5 填充每个service分组前三url的RED图表数据
+	s.EndpointRangeREDChart(&services, startTime, endTime, duration, step)
+
+	// step6 填充空值并调整返回结构
+	var servicesResMsg []response.ServiceEndPointsRes
+	for _, service := range services {
+		if service.ServiceName == "" {
+			continue
+		}
+		serviceDetails := s.extractDetail(service, startTime, endTime, step)
+
+		if serviceDetails == nil {
+			continue
+		}
+
+		// endpoint的namespaceList去重
+		tmpSet := make(map[string]struct{})
+		nsList := make([]string, 0)
+		for _, endpoint := range service.Endpoints {
+			for _, ns := range endpoint.NamespaceList {
+				if _, find := tmpSet[ns]; find {
+					continue
+				}
+				tmpSet[ns] = struct{}{}
+				nsList = append(nsList, ns)
+			}
+		}
+
+		newServiceRes := response.ServiceEndPointsRes{
+			ServiceName:    service.ServiceName,
+			Namespaces:     nsList,
+			EndpointCount:  service.EndpointCount,
+			ServiceDetails: serviceDetails,
+		}
+
+		servicesResMsg = append(servicesResMsg, newServiceRes)
+	}
+	return servicesResMsg, err
+}
+
+func (s *service) GetServicesEndpointDataByEndpoints(startTime time.Time, endTime time.Time, step time.Duration, endpoints []prom.EndpointKey, sortRule SortType) (res []response.ServiceEndPointsRes, err error) {
+	var duration string
+	var stepNS = endTime.Sub(startTime).Nanoseconds()
+	duration = strconv.FormatInt(stepNS/int64(time.Minute), 10) + "m"
+
+	filters := extractEndpointFiltersByEndpoints(endpoints)
+
+	// step1 查询满足Filter的Endpoint,并返回对应的RED指标
+	// RED指标包含了选定时间段内的平均值,日同比变化率和周同比变化率
+	endpointsMap := s.QueryEndpointsREDMetricByFilter(startTime, endTime, filters)
+
+	// step2 填充延时依赖关系
+	err = s.EndpointsDelaySource(endpointsMap, startTime, endTime, filters)
+	if err != nil {
+		// TODO 输出错误日志, DelaySource查询失败
+	}
+
+	// step2.. 填充Namespace信息
+	err = s.EndpointsNamespaceInfo(endpointsMap, startTime, endTime, filters)
+	if err != nil {
+		// TODO 输出错误日志, Namespace查询失败
+	}
+
+	// step3 根据排序规则对URL进行排序, 并填充前期未查询到的数据
+	if sortRule == MUTATIONSORT {
+		// 填充实时RED指标用于排序(当前时间往前3分钟之间的情况)
+		s.EndpointsRealtimeREDMetric(filters, endpointsMap, startTime, endTime)
 	}
 	// 根据排序规则对endpoints进行排序并填充部分未查询到的数据
 	err = s.sortWithRule(sortRule, endpointsMap)

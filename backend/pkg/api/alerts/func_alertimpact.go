@@ -12,6 +12,7 @@ import (
 	"github.com/CloudDetail/apo/backend/pkg/model/response"
 	"github.com/CloudDetail/apo/backend/pkg/repository/clickhouse"
 	"github.com/CloudDetail/apo/backend/pkg/repository/database"
+	"github.com/CloudDetail/apo/backend/pkg/repository/prometheus"
 	"github.com/CloudDetail/apo/backend/pkg/services/serviceoverview"
 	"go.uber.org/zap"
 )
@@ -44,6 +45,7 @@ func (h *handler) AlertImpact() core.HandlerFunc {
 		entryNodes, err := h.alertService.AlertImpact(req.EventID, req.StartTime, req.EndTime)
 		if err != nil {
 			var vErr model.ErrAlertImpactMissingTag
+			var vErr2 model.ErrAlertImpactNoMatchedService
 			if errors.As(err, &vErr) {
 				// 告警所需的关联信息不足
 				// 提示告警中需要包含下列任意label组合
@@ -53,6 +55,13 @@ func (h *handler) AlertImpact() core.HandlerFunc {
 					code.Text(code.AlertEventImpactMissingTag)+vErr.CheckedTagGroups()).WithError(err),
 				)
 				return
+			} else if errors.As(err, &vErr2) {
+				c.AbortWithError(core.Error(
+					http.StatusBadRequest,
+					code.AlertEventImpactNoMatchedService,
+					code.Text(code.AlertEventImpactNoMatchedService)+vErr2.CheckedTagGroup()).WithError(err),
+				)
+				return
 			} else {
 				// 查询失败
 				c.AbortWithError(core.Error(
@@ -60,18 +69,28 @@ func (h *handler) AlertImpact() core.HandlerFunc {
 					code.AlertEventImpactError,
 					code.Text(code.AlertEventImpactError)).WithError(err),
 				)
+				return
 			}
 		}
 
 		// 填充EntryEndpoint信息
-		resp := h.FillEntryNodeDetail(req, entryNodes)
+		resp, err := h.FillEntryNodeDetail(req, entryNodes)
+		if err != nil {
+			// 查询失败
+			c.AbortWithError(core.Error(
+				http.StatusBadRequest,
+				code.AlertEventImpactError,
+				code.Text(code.AlertEventImpactError)).WithError(err),
+			)
+			return
+		}
 		c.Payload(resp)
 	}
 }
 
 // FillEntryNodeDetail 填充EntryEndpoint信息
 // 复制于 backend/pkg/api/service/func_getserviceentryendpoints.go
-func (h *handler) FillEntryNodeDetail(req *request.AlertImpactRequest, entryNodes []clickhouse.EntryNode) response.GetServiceEntryEndpointsResponse {
+func (h *handler) FillEntryNodeDetail(req *request.AlertImpactRequest, entryNodes []clickhouse.EntryNode) (*response.GetServiceEntryEndpointsResponse, error) {
 	result := make(map[string]*response.EntryInstanceData, 0)
 	resp := response.GetServiceEntryEndpointsResponse{
 		Status: model.STATUS_NORMAL,
@@ -94,43 +113,42 @@ func (h *handler) FillEntryNodeDetail(req *request.AlertImpactRequest, entryNode
 	sortRule := serviceoverview.DODThreshold
 	step := time.Duration(req.Step * 1000)
 
+	endpoints := make([]prometheus.EndpointKey, 0)
 	for _, entryNode := range entryNodes {
-		filter := serviceoverview.EndpointsFilter{
-			ContainsSvcName:      entryNode.Service,
-			ContainsEndpointName: entryNode.Endpoint,
-			Namespace:            "",
-		}
-		endpointResps, err := h.serviceoverviewService.GetServicesEndPointData(startTime, endTime, step, filter, sortRule)
-		if err != nil {
-			continue
-		}
-		for _, endpointResp := range endpointResps {
-			if serviceResp, found := result[endpointResp.ServiceName]; found {
-				serviceResp.Namespaces = endpointResp.Namespaces
-				serviceResp.EndpointCount += endpointResp.EndpointCount
-				serviceResp.AddNamespaces(endpointResp.Namespaces)
-			} else {
-				result[endpointResp.ServiceName] = &response.EntryInstanceData{
-					ServiceName:    endpointResp.ServiceName,
-					Namespaces:     endpointResp.Namespaces,
-					EndpointCount:  endpointResp.EndpointCount,
-					ServiceDetails: endpointResp.ServiceDetails,
-				}
-			}
+		endpoints = append(endpoints, prometheus.EndpointKey{SvcName: entryNode.Service, ContentKey: entryNode.Endpoint})
+	}
 
-			for _, detail := range endpointResp.ServiceDetails {
-				if detail.Latency.Ratio.DayOverDay != nil && *detail.Latency.Ratio.DayOverDay > threshold.Latency {
-					resp.Status = model.STATUS_CRITICAL
-				}
-				if detail.Latency.Ratio.WeekOverDay != nil && *detail.Latency.Ratio.WeekOverDay > threshold.Latency {
-					resp.Status = model.STATUS_CRITICAL
-				}
-				if detail.ErrorRate.Ratio.DayOverDay != nil && *detail.ErrorRate.Ratio.DayOverDay > threshold.ErrorRate {
-					resp.Status = model.STATUS_CRITICAL
-				}
-				if detail.ErrorRate.Ratio.WeekOverDay != nil && *detail.ErrorRate.Ratio.WeekOverDay > threshold.ErrorRate {
-					resp.Status = model.STATUS_CRITICAL
-				}
+	endpointResps, err := h.serviceoverviewService.GetServicesEndpointDataByEndpoints(startTime, endTime, step, endpoints, sortRule)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, endpointResp := range endpointResps {
+		if serviceResp, found := result[endpointResp.ServiceName]; found {
+			serviceResp.Namespaces = endpointResp.Namespaces
+			serviceResp.EndpointCount += endpointResp.EndpointCount
+			serviceResp.AddNamespaces(endpointResp.Namespaces)
+		} else {
+			result[endpointResp.ServiceName] = &response.EntryInstanceData{
+				ServiceName:    endpointResp.ServiceName,
+				Namespaces:     endpointResp.Namespaces,
+				EndpointCount:  endpointResp.EndpointCount,
+				ServiceDetails: endpointResp.ServiceDetails,
+			}
+		}
+
+		for _, detail := range endpointResp.ServiceDetails {
+			if detail.Latency.Ratio.DayOverDay != nil && *detail.Latency.Ratio.DayOverDay > threshold.Latency {
+				resp.Status = model.STATUS_CRITICAL
+			}
+			if detail.Latency.Ratio.WeekOverDay != nil && *detail.Latency.Ratio.WeekOverDay > threshold.Latency {
+				resp.Status = model.STATUS_CRITICAL
+			}
+			if detail.ErrorRate.Ratio.DayOverDay != nil && *detail.ErrorRate.Ratio.DayOverDay > threshold.ErrorRate {
+				resp.Status = model.STATUS_CRITICAL
+			}
+			if detail.ErrorRate.Ratio.WeekOverDay != nil && *detail.ErrorRate.Ratio.WeekOverDay > threshold.ErrorRate {
+				resp.Status = model.STATUS_CRITICAL
 			}
 		}
 	}
@@ -170,5 +188,5 @@ func (h *handler) FillEntryNodeDetail(req *request.AlertImpactRequest, entryNode
 	for _, endpointsResp := range result {
 		resp.Data = append(resp.Data, endpointsResp)
 	}
-	return resp
+	return &resp, nil
 }

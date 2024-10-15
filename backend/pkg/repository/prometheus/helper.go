@@ -21,6 +21,7 @@ const (
 	IsErrorPQLFilter     = "is_error="
 	NodeNamePQLFilter    = "node_name="
 	PodPQLFilter         = "pod="
+	PidPQLFilter         = "pid="
 
 	ContentKeyRegexPQLFilter = "content_key=~"
 	ServiceRegexPQLFilter    = "svc_name=~"

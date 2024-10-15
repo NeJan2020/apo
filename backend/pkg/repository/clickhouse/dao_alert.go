@@ -192,9 +192,14 @@ func (ch *chRepo) GetAlertEventById(eventId string, startTime, endTime time.Time
 	byLimit := NewByLimitBuilder().Limit(1)
 
 	sql := fmt.Sprintf(SQL_GET_ALERT_EVENT, builder.String(), byLimit.String())
-	var event model.AlertEvent
+	var event []model.AlertEvent
 	err := ch.conn.Select(context.Background(), &event, sql, builder.values...)
-	return &event, err
+	if err != nil {
+		return nil, err
+	} else if len(event) == 0 {
+		return nil, fmt.Errorf("no event found with ID %s", eventId)
+	}
+	return &event[0], err
 }
 
 func extractFilter(filter request.AlertFilter, instances []*model.ServiceInstance) *whereSQL {

@@ -30,10 +30,11 @@ func (s *service) AlertImpact(eventid string, startTimeTs, endTimeTs int64) ([]c
 	case clickhouse.APP_GROUP:
 		endpoints, err = s.tryGetAlertServiceByService(event, startTime, endTime)
 	case clickhouse.NETWORK_GROUP:
-		if event.GetLevelTag() == "service" {
-			endpoints, err = s.tryGetAlertServiceByService(event, startTime, endTime)
-		} else if event.GetLevelTag() == "instance" {
-			endpoints, err = s.tryGetAlertServiceByNetSrcNode(event, startTime, endTime)
+		// 先尝试K8sPod匹配
+		endpoints, err = s.tryGetAlertServiceByContainer(event, startTime, endTime)
+		if err != nil && errors.As(err, &model.ErrAlertImpactMissingTag{}) {
+			// 再尝试Node匹配
+			endpoints, err = s.tryGetAlertServiceByNetSrcVM(event, startTime, endTime)
 		}
 	case clickhouse.CONTAINER_GROUP:
 		endpoints, err = s.tryGetAlertServiceByContainer(event, startTime, endTime)
@@ -41,7 +42,7 @@ func (s *service) AlertImpact(eventid string, startTimeTs, endTimeTs int64) ([]c
 		endpoints, err = s.tryGetAlertServiceByInfraNode(event, startTime, endTime)
 	}
 
-	if len(endpoints) == 0 {
+	if err != nil && errors.As(err, &model.ErrAlertImpactMissingTag{}) {
 		// 预期的Label不存在,尝试所有预设的label组合
 		endpoints, err = s.tryGetAlertService(event, startTime, endTime)
 	}
@@ -51,15 +52,15 @@ func (s *service) AlertImpact(eventid string, startTimeTs, endTimeTs int64) ([]c
 	}
 
 	// 通过ServiceTopology关联查询入口
-	return s.chRepo.SearchEntryEndpointsByAlertService(endpoints, startTime.Unix(), endTime.Unix())
+	return s.chRepo.SearchEntryEndpointsByAlertService(endpoints, startTime.UnixMicro(), endTime.UnixMicro())
 }
 
 func (s *service) tryGetAlertService(event *model.AlertEvent, startTime time.Time, endTime time.Time) ([]clickhouse.AlertService, error) {
 	var tryMethods = []func(*model.AlertEvent, time.Time, time.Time) ([]clickhouse.AlertService, error){
 		s.tryGetAlertServiceByService,
 		s.tryGetAlertServiceByContainer,
+		s.tryGetAlertServiceByNetSrcVM,
 		s.tryGetAlertServiceByInfraNode,
-		s.tryGetAlertServiceByNetSrcNode,
 	}
 	var endpoints []clickhouse.AlertService
 	checkedError := model.ErrAlertImpactMissingTag{
@@ -112,6 +113,13 @@ func (s *service) tryGetAlertServiceByContainer(event *model.AlertEvent, startTi
 			ServiceName: service,
 		})
 	}
+
+	if len(endpoints) == 0 {
+		return nil, model.ErrAlertImpactNoMatchedService{
+			TagGroup:  []string{"pod", "namespace"},
+			TagValues: []string{podName, namespace},
+		}
+	}
 	return endpoints, nil
 }
 
@@ -132,18 +140,20 @@ func (s *service) tryGetAlertServiceByService(event *model.AlertEvent, _ time.Ti
 	}, nil
 }
 
-func (s *service) tryGetAlertServiceByNetSrcNode(event *model.AlertEvent, startTime time.Time, endTime time.Time) ([]clickhouse.AlertService, error) {
+func (s *service) tryGetAlertServiceByNetSrcVM(event *model.AlertEvent, startTime time.Time, endTime time.Time) ([]clickhouse.AlertService, error) {
 	nodeName := event.GetNetSrcNodeTag()
-	if len(nodeName) == 0 {
+	pid := event.GetNetSrcPidTag()
+	if len(nodeName) == 0 || len(pid) == 0 {
 		return nil, model.ErrAlertImpactMissingTag{
-			TagGroups: []model.TagGroup{[]string{"node"}},
+			TagGroups: []model.TagGroup{[]string{"node", "pid"}},
 			Event:     event,
 		}
 	}
 
 	services, err := s.promRepo.GetServiceListByFilter(
 		startTime, endTime,
-		prometheus.NodeNamePQLFilter, event.GetInfraNodeTag(),
+		prometheus.NodeNamePQLFilter, nodeName,
+		prometheus.PidPQLFilter, pid,
 	)
 
 	if err != nil {
@@ -156,6 +166,14 @@ func (s *service) tryGetAlertServiceByNetSrcNode(event *model.AlertEvent, startT
 			ServiceName: service,
 		})
 	}
+
+	if len(endpoints) == 0 {
+		return nil, model.ErrAlertImpactNoMatchedService{
+			TagGroup:  []string{"node_name", "pid"},
+			TagValues: []string{nodeName, pid},
+		}
+	}
+
 	return endpoints, nil
 }
 
@@ -170,7 +188,7 @@ func (s *service) tryGetAlertServiceByInfraNode(event *model.AlertEvent, startTi
 
 	services, err := s.promRepo.GetServiceListByFilter(
 		startTime, endTime,
-		prometheus.NodeNamePQLFilter, event.GetInfraNodeTag(),
+		prometheus.NodeNamePQLFilter, nodeName,
 	)
 
 	if err != nil {
@@ -183,5 +201,13 @@ func (s *service) tryGetAlertServiceByInfraNode(event *model.AlertEvent, startTi
 			ServiceName: service,
 		})
 	}
+
+	if len(endpoints) == 0 {
+		return nil, model.ErrAlertImpactNoMatchedService{
+			TagGroup:  []string{"node"},
+			TagValues: []string{nodeName},
+		}
+	}
+
 	return endpoints, nil
 }

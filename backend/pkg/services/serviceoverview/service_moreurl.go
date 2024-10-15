@@ -6,24 +6,25 @@ import (
 	"time"
 
 	"github.com/CloudDetail/apo/backend/pkg/repository/database"
+	prom "github.com/CloudDetail/apo/backend/pkg/repository/prometheus"
 
 	"github.com/CloudDetail/apo/backend/pkg/model/response"
 )
 
-func (s *service) GetServiceMoreUrl(startTime time.Time, endTime time.Time, step time.Duration, serviceNames string, sortRule SortType) (res []response.ServiceDetail, err error) {
+func (s *service) GetServiceMoreUrl(startTime time.Time, endTime time.Time, step time.Duration, serviceName string, sortRule SortType) (res []response.ServiceDetail, err error) {
 	var duration string
 	var stepNS = endTime.Sub(startTime).Nanoseconds()
 	duration = strconv.FormatInt(stepNS/int64(time.Minute), 10) + "m"
 
-	filter := EndpointsFilter{
-		ServiceName: serviceNames,
+	filters := []string{
+		prom.ServicePQLFilter, serviceName,
 	}
 
-	endpointsMap := s.EndpointsREDMetric(startTime, endTime, filter)
+	endpointsMap := s.QueryEndpointsREDMetricByFilter(startTime, endTime, filters)
 	endpoints := endpointsMap.MetricGroupList
 
 	// step2 填充延时依赖关系
-	err = s.EndpointsDelaySource(endpointsMap, startTime, endTime, filter)
+	err = s.EndpointsDelaySource(endpointsMap, startTime, endTime, filters)
 	if err != nil {
 		// TODO 输出错误日志, DelaySource查询失败
 	}

@@ -51,7 +51,7 @@ func (h *handler) GetEndPointsData() core.HandlerFunc {
 			Namespace:            req.Namespace,
 		}
 
-		data, err := h.serviceoverview.GetServicesEndPointData(startTime, endTime, step, filter, sortRule)
+		data, err := h.serviceoverview.GetServicesEndpointDataByFilter(startTime, endTime, step, filter, sortRule)
 		if err != nil {
 			c.AbortWithError(core.Error(
 				http.StatusBadRequest,

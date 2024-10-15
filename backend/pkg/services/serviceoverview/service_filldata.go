@@ -106,14 +106,42 @@ func (s *service) UrlAVG(Urls *[]prom.EndpointMetrics, serviceName string, endTi
 	return Urls, err
 }
 
-// EndpointsREDMetric 查询Endpoint级别的RED指标结果(包括平均值,日同比变化率,周同比变化率)
-func (s *service) EndpointsREDMetric(startTime, endTime time.Time, filter EndpointsFilter) *EndpointsMap {
+// QueryEndpointsREDMetricByFilter 查询Endpoint级别的RED指标结果(包括平均值,日同比变化率,周同比变化率)
+func (s *service) QueryEndpointsREDMetricByFilter(startTime, endTime time.Time, filters []string) *EndpointsMap {
 	var res = &EndpointsMap{
 		MetricGroupList: []*prom.EndpointMetrics{},
 		MetricGroupMap:  map[prom.EndpointKey]*prom.EndpointMetrics{},
 	}
 
-	filters := extractEndpointFilters(filter)
+	// 填充时间段内的平均RED指标
+	s.fillMetric(res, prom.AVG, startTime, endTime, filters)
+	// 填充时间段内的RED指标日同比
+	s.fillMetric(res, prom.DOD, startTime, endTime, filters)
+	// 填充时间段内的RED指标周同比
+	s.fillMetric(res, prom.WOW, startTime, endTime, filters)
+
+	return res
+}
+
+// QueryREDMetricByEndpoints 查询Endpoint级别的RED指标结果(包括平均值,日同比变化率,周同比变化率)
+func (s *service) QueryREDMetricByEndpoints(startTime, endTime time.Time, endpoints []prom.EndpointKey) *EndpointsMap {
+	var res = &EndpointsMap{
+		MetricGroupList: []*prom.EndpointMetrics{},
+		MetricGroupMap:  map[prom.EndpointKey]*prom.EndpointMetrics{},
+	}
+
+	// var filters []string
+	var services []string
+	var contentKeys []string
+	for _, endpoint := range endpoints {
+		services = append(services, endpoint.SvcName)
+		contentKeys = append(contentKeys, endpoint.ContentKey)
+	}
+
+	filters := []string{
+		prom.ServiceRegexPQLFilter, prom.RegexMultipleValue(services...),
+		prom.ContentKeyRegexPQLFilter, prom.RegexMultipleValue(contentKeys...),
+	}
 
 	// 填充时间段内的平均RED指标
 	s.fillMetric(res, prom.AVG, startTime, endTime, filters)
@@ -143,8 +171,24 @@ func extractEndpointFilters(filter EndpointsFilter) []string {
 	return filters
 }
 
-func (s *service) EndpointsRealtimeREDMetric(filter EndpointsFilter, endpointsMap *EndpointsMap, startTime time.Time, endTime time.Time) {
-	filters := extractEndpointFilters(filter)
+func extractEndpointFiltersByEndpoints(endpoints []prom.EndpointKey) []string {
+	// var filters []string
+	var services []string
+	var contentKeys []string
+	for _, endpoint := range endpoints {
+		services = append(services, endpoint.SvcName)
+		contentKeys = append(contentKeys, endpoint.ContentKey)
+	}
+
+	filters := []string{
+		prom.ServiceRegexPQLFilter, prom.RegexMultipleValue(services...),
+		prom.ContentKeyRegexPQLFilter, prom.RegexMultipleValue(contentKeys...),
+	}
+
+	return filters
+}
+
+func (s *service) EndpointsRealtimeREDMetric(filters []string, endpointsMap *EndpointsMap, startTime time.Time, endTime time.Time) {
 	s.fillMetric(endpointsMap, prom.REALTIME, startTime, endTime, filters)
 }
 
@@ -209,9 +253,7 @@ func (s *service) fillMetric(res *EndpointsMap, metricGroup prom.MGroupName, sta
 
 // EndpointsDelaySource 填充延时来源
 // 基于输入的Endpoints填充, 会抛弃Endpoints中不存在的记录
-func (s *service) EndpointsDelaySource(endpoints *EndpointsMap, startTime, endTime time.Time, filter EndpointsFilter) error {
-	filters := extractEndpointFilters(filter)
-
+func (s *service) EndpointsDelaySource(endpoints *EndpointsMap, startTime, endTime time.Time, filters []string) error {
 	startTS := startTime.UnixMicro()
 	endTS := endTime.UnixMicro()
 
@@ -242,9 +284,7 @@ func (s *service) EndpointsDelaySource(endpoints *EndpointsMap, startTime, endTi
 	return nil
 }
 
-func (s *service) EndpointsNamespaceInfo(endpoints *EndpointsMap, startTime, endTime time.Time, filter EndpointsFilter) error {
-	filters := extractEndpointFilters(filter)
-
+func (s *service) EndpointsNamespaceInfo(endpoints *EndpointsMap, startTime, endTime time.Time, filters []string) error {
 	startTS := startTime.UnixMicro()
 	endTS := endTime.UnixMicro()
 

@@ -88,6 +88,8 @@ var zhCnText = map[string]string{
 	AlertManagerEmptyReceiver:               "告警通知对象没有设置任何 webhook 或 email 配置",
 	AlertManagerDefaultReceiverCannotDelete: "默认告警通知对象不能被删除",
 
-	AlertEventImpactError:      "查询告警事件影响面失败",
-	AlertEventImpactMissingTag: "查询告警事件影响面失败, 事件标签中未找到任意可关联标签组",
+	AlertEventImpactError:            "查询告警事件影响面失败",
+	AlertEventImpactMissingTag:       "查询告警事件影响面失败, 事件标签中未找到任意可关联标签组 ",
+	AlertEventImpactNoMatchedService: "查询告警事件影响面失败, 未找到告警事件匹配的服务 ",
+	AlertEventIDMissing:              "查询告警事件影响面失败, 搜索时间范围内未找到告警事件ID对应的事件 ",
 }

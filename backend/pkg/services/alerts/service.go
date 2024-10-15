@@ -46,15 +46,15 @@ type Service interface {
 }
 
 type service struct {
-	chRepo clickhouse.Repo
-	// TODO init promRepo
+	chRepo   clickhouse.Repo
 	promRepo prometheus.Repo
 	k8sApi   kubernetes.Repo
 }
 
-func New(chRepo clickhouse.Repo, k8sApi kubernetes.Repo) Service {
+func New(chRepo clickhouse.Repo, promRepo prometheus.Repo, k8sApi kubernetes.Repo) Service {
 	return &service{
-		chRepo: chRepo,
-		k8sApi: k8sApi,
+		chRepo:   chRepo,
+		promRepo: promRepo,
+		k8sApi:   k8sApi,
 	}
 }

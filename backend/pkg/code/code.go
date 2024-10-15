@@ -96,8 +96,10 @@ const (
 	AlertManagerDefaultReceiverCannotDelete = "B0726"
 
 	// Alert Analyze
-	AlertEventImpactError      = "B0801"
-	AlertEventImpactMissingTag = "B0802"
+	AlertEventImpactError            = "B0727"
+	AlertEventImpactMissingTag       = "B0728"
+	AlertEventImpactNoMatchedService = "B0729"
+	AlertEventIDMissing              = "B0730"
 )
 
 func Text(code string) string {

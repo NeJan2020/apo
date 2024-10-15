@@ -63,6 +63,10 @@ func (a *AlertEvent) GetNetSrcNodeTag() string {
 	return a.Tags["node"]
 }
 
+func (a *AlertEvent) GetNetSrcPidTag() string {
+	return a.Tags["pid"]
+}
+
 func (a *AlertEvent) GetK8sNamespaceTag() string {
 	return a.Tags["namespace"]
 }

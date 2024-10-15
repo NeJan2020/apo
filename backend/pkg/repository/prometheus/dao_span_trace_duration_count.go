@@ -14,6 +14,7 @@ import (
 )
 
 const (
+	TEMPLATE_GET_SERVICES_BY_FILTER      = `group by (svc_name) (last_over_time(kindling_span_trace_duration_nanoseconds_count{%s}[%s])) `
 	TEMPLATE_GET_SERVICES                = `sum by(svc_name) (increase(kindling_span_trace_duration_nanoseconds_count[%s]))`
 	TEMPLATE_GET_ENDPOINTS               = `sum by(content_key) (increase(kindling_span_trace_duration_nanoseconds_count{%s}[%s]))`
 	TEMPLATE_GET_SERVICE_INSTANCE        = `sum by(svc_name, pod, pid, container_id, node_name, namespace) (increase(kindling_span_trace_duration_nanoseconds_count{%s}[%s]))`
@@ -52,8 +53,12 @@ func (repo *promRepo) GetServiceListByFilter(startTime time.Time, endTime time.T
 		filters = append(filters, fmt.Sprintf("%s\"%s\"", filterKVs[i], filterKVs[i+1]))
 	}
 
-	pql := fmt.Sprintf(TEMPLATE_GET_SERVICES, strings.Join(filters, ","))
-	ress, err := repo.QueryRangeData(startTime, endTime, pql, time.Second*15)
+	pql := fmt.Sprintf(
+		TEMPLATE_GET_SERVICES_BY_FILTER,
+		strings.Join(filters, ","),
+		VecFromS2E(startTime.UnixMicro(), endTime.UnixMicro()),
+	)
+	ress, err := repo.QueryData(endTime, pql)
 	if err != nil {
 		return nil, err
 	}

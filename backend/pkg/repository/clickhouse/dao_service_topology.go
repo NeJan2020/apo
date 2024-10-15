@@ -48,8 +48,7 @@ const (
 		GROUP BY nodes.service, nodes.url, nodes.parent_service, nodes.parent_url
 	`
 
-	SQL_GET_ENTRY_NODES = `
-		SELECT entry_service as service, entry_url as endpoint
+	SQL_GET_ENTRY_NODES = `SELECT entry_service as service, entry_url as endpoint
 			FROM service_topology
 			ARRAY JOIN nodes
 			%s
@@ -118,26 +117,36 @@ type AlertService struct {
 }
 
 func (ch *chRepo) SearchEntryEndpointsByAlertService(
-	endpoints []AlertService,
+	alertServices []AlertService,
 	startTime, endTime int64,
 ) ([]EntryNode, error) {
 	// microseconds -> seconds
 	startTime = startTime / 1000000
 	endTime = endTime / 1000000
 
-	var svcEndpoints = ValueInGroups{
+	// services中可能包含两类数据,contentKey为空时,表示忽略contentKey
+	var endpoints = ValueInGroups{
 		Keys: []string{"nodes.service", "nodes.url"},
 	}
+	var services = ValueInGroups{
+		Keys: []string{"nodes.service"},
+	}
 
-	for _, endpoint := range endpoints {
-		svcEndpoints.ValueGroups = append(svcEndpoints.ValueGroups, clickhouse.GroupSet{
-			Value: []any{endpoint.ServiceName, endpoint.ContentKey},
-		})
+	for _, endpoint := range alertServices {
+		if len(endpoint.ContentKey) > 0 {
+			endpoints.ValueGroups = append(endpoints.ValueGroups, clickhouse.GroupSet{
+				Value: []any{endpoint.ServiceName, endpoint.ContentKey},
+			})
+		} else {
+			services.ValueGroups = append(services.ValueGroups, clickhouse.GroupSet{
+				Value: []any{endpoint.ServiceName},
+			})
+		}
 	}
 
 	queryBuilder := NewQueryBuilder().
 		Between("timestamp", startTime, endTime).
-		And(InGroup(svcEndpoints))
+		And(MergeWheres(OrSep, InGroup(endpoints), InGroup(services)))
 
 	results := []EntryNode{}
 	sql := fmt.Sprintf(SQL_GET_ENTRY_NODES, queryBuilder.String())

@@ -1,6 +1,9 @@
 package model
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type ErrWithMessage struct {
 	Err  error
@@ -35,4 +38,33 @@ func (e ErrAlertImpactMissingTag) CheckedTagGroups() string {
 
 func (e *ErrAlertImpactMissingTag) AddCheckedGroup(err ErrAlertImpactMissingTag) {
 	e.TagGroups = append(e.TagGroups, err.TagGroups...)
+}
+
+type ErrAlertImpactNoMatchedService struct {
+	TagGroup  TagGroup
+	TagValues []string
+}
+
+func (e ErrAlertImpactNoMatchedService) Error() string {
+	var checkedGroup []string
+	for idx, group := range e.TagGroup {
+		if idx == len(e.TagValues) {
+			break
+		}
+		checkedGroup = append(checkedGroup, fmt.Sprintf("%s:%s", group, e.TagValues[idx]))
+	}
+
+	return fmt.Sprintf("no service found for [ %s ]", strings.Join(checkedGroup, ", "))
+}
+
+func (e ErrAlertImpactNoMatchedService) CheckedTagGroup() string {
+	var checkedGroup []string
+	for idx, group := range e.TagGroup {
+		if idx == len(e.TagValues) {
+			break
+		}
+		checkedGroup = append(checkedGroup, fmt.Sprintf("%s:%s", group, e.TagValues[idx]))
+	}
+
+	return fmt.Sprintf("[%s]", strings.Join(checkedGroup, ", "))
 }
