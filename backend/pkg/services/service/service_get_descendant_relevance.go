@@ -103,6 +103,13 @@ func (s *service) GetDescendantRelevance(req *request.GetDescendantRelevanceRequ
 			startTime, endTime,
 		)
 
+		// 填充日志告警状态
+		descendantResp.AlertStatusPROM = serviceoverview.GetAlertStatusProm(
+			s.promRepo, &descendantResp.AlertReason, nil,
+			[]string{}, descendant.Service, instanceList,
+			startTime, endTime,
+		)
+
 		// 查询并填充进程启动时间
 		startTSmap, _ := s.promRepo.QueryProcessStartTime(startTime, endTime, instanceList)
 		latestStartTime := getLatestStartTime(startTSmap) * 1e6
