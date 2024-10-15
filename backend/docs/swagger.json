@@ -169,6 +169,65 @@
                 }
             }
         },
+        "/api/alerts/descendant/anormal": {
+            "get": {
+                "description": "获取下游告警事件",
+                "consumes": [
+                    "application/x-www-form-urlencoded"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "API.alerts"
+                ],
+                "summary": "获取下游告警事件",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "查询开始时间",
+                        "name": "startTime",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "查询结束时间",
+                        "name": "endTime",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "查询服务名",
+                        "name": "service",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "查询Endpoint",
+                        "name": "endpoint",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.GetDescendantAnormalEventResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/code.Failure"
+                        }
+                    }
+                }
+            }
+        },
         "/api/alerts/event/impact": {
             "get": {
                 "description": "获取告警数据的影响面",
@@ -3965,6 +4024,72 @@
                 }
             }
         },
+        "model.AnormalEvent": {
+            "type": "object",
+            "properties": {
+                "anormalType": {
+                    "description": "异常类型",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.AnormalType"
+                        }
+                    ]
+                },
+                "impactEndpoints": {
+                    "description": "受异常影响的端点",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.AnormalEventDetail"
+                    }
+                },
+                "timestamp": {
+                    "description": "事件发生的时间戳",
+                    "type": "integer"
+                }
+            }
+        },
+        "model.AnormalEventDetail": {
+            "type": "object",
+            "properties": {
+                "alertMessage": {
+                    "description": "具体的事件信息",
+                    "type": "string"
+                },
+                "alertObject": {
+                    "description": "影响的实例",
+                    "type": "string"
+                },
+                "alertReason": {
+                    "description": "粗略的影响描述",
+                    "type": "string"
+                },
+                "contentKey": {
+                    "type": "string"
+                },
+                "serviceName": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.AnormalType": {
+            "type": "integer",
+            "enum": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5
+            ],
+            "x-enum-varnames": [
+                "AnormalTypeUnknown",
+                "AnormalTypeAlertApp",
+                "AnormalTypeAlertContainer",
+                "AnormalTypeAlertInfra",
+                "AnormalTypeAlertNet",
+                "AnormalTypeExceptionJAVA"
+            ]
+        },
         "model.ModifyTableTTLMap": {
             "type": "object",
             "properties": {
@@ -4958,6 +5083,17 @@
                 },
                 "pagination": {
                     "$ref": "#/definitions/model.Pagination"
+                }
+            }
+        },
+        "response.GetDescendantAnormalEventResponse": {
+            "type": "object",
+            "properties": {
+                "anormalEvents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.AnormalEvent"
+                    }
                 }
             }
         },

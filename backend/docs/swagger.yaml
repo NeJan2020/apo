@@ -514,6 +514,53 @@ definitions:
         $ref: '#/definitions/model.AlertDetail'
       type: array
     type: object
+  model.AnormalEvent:
+    properties:
+      anormalType:
+        allOf:
+        - $ref: '#/definitions/model.AnormalType'
+        description: 异常类型
+      impactEndpoints:
+        description: 受异常影响的端点
+        items:
+          $ref: '#/definitions/model.AnormalEventDetail'
+        type: array
+      timestamp:
+        description: 事件发生的时间戳
+        type: integer
+    type: object
+  model.AnormalEventDetail:
+    properties:
+      alertMessage:
+        description: 具体的事件信息
+        type: string
+      alertObject:
+        description: 影响的实例
+        type: string
+      alertReason:
+        description: 粗略的影响描述
+        type: string
+      contentKey:
+        type: string
+      serviceName:
+        type: string
+    type: object
+  model.AnormalType:
+    enum:
+    - 0
+    - 1
+    - 2
+    - 3
+    - 4
+    - 5
+    type: integer
+    x-enum-varnames:
+    - AnormalTypeUnknown
+    - AnormalTypeAlertApp
+    - AnormalTypeAlertContainer
+    - AnormalTypeAlertInfra
+    - AnormalTypeAlertNet
+    - AnormalTypeExceptionJAVA
   model.ModifyTableTTLMap:
     properties:
       TTLExpression:
@@ -1202,6 +1249,13 @@ definitions:
         type: array
       pagination:
         $ref: '#/definitions/model.Pagination'
+    type: object
+  response.GetDescendantAnormalEventResponse:
+    properties:
+      anormalEvents:
+        items:
+          $ref: '#/definitions/model.AnormalEvent'
+        type: array
     type: object
   response.GetDescendantMetricsResponse:
     properties:
@@ -1936,6 +1990,46 @@ paths:
           schema:
             $ref: '#/definitions/code.Failure'
       summary: 列出告警通知对象
+      tags:
+      - API.alerts
+  /api/alerts/descendant/anormal:
+    get:
+      consumes:
+      - application/x-www-form-urlencoded
+      description: 获取下游告警事件
+      parameters:
+      - description: 查询开始时间
+        in: query
+        name: startTime
+        required: true
+        type: integer
+      - description: 查询结束时间
+        in: query
+        name: endTime
+        required: true
+        type: integer
+      - description: 查询服务名
+        in: query
+        name: service
+        required: true
+        type: string
+      - description: 查询Endpoint
+        in: query
+        name: endpoint
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/response.GetDescendantAnormalEventResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/code.Failure'
+      summary: 获取下游告警事件
       tags:
       - API.alerts
   /api/alerts/event/impact:
