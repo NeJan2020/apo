@@ -102,6 +102,7 @@ const (
 	AlertEventIDMissing              = "B0730"
 
 	AlertAnalyzeDescendantAnormalEventError = "B0731"
+	GetAnomalySpanError                     = "B0732"
 )
 
 func Text(code string) string {

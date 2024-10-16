@@ -175,3 +175,15 @@ type GetServiceEntryEndpointsRequest struct {
 	Endpoint  string `form:"endpoint" binding:"required"`                  // 查询Endpoint
 	Step      int64  `form:"step" binding:"required"`                      // 查询步长(us)
 }
+
+type GetAnomalySpanRequest struct {
+	StartTime  int64  `json:"startTime" binding:"required"`
+	EndTime    int64  `json:"endTime" binding:"required"`
+	Service    string `json:"service" binding:"required"`
+	ContentKey string `json:"contentKey" binding:"required"`
+	Reason     string `json:"reason" binding:"required"`
+	IsSlow     string `json:"isSlow"`
+	IsError    string `json:"isError"`
+	*PageParam `json:",inline"`
+}
+
