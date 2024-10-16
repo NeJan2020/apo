@@ -41,6 +41,28 @@ const (
 	`
 )
 
+func (ch *chRepo)  ListErrorByEntryService(startTime, endTime int64, entryService, entryEndpoint string) ([]ErrorInstancePropagation, error) {
+	startTime = startTime / 1000000
+	endTime = endTime / 1000000
+
+	queryBuilder := NewQueryBuilder().
+		Between("timestamp", startTime, endTime).
+		Equals("nodes.is_traced", true).
+		Equals("nodes.is_error", true).
+		EqualsNotEmpty("entry_service", entryService).
+		EqualsNotEmpty("entry_url", entryEndpoint).
+		Statement("LENGTH(nodes.error_types) > 0") // 返回的数据必须有ErrorTypes
+	bySql := NewByLimitBuilder().
+		OrderBy("timestamp", false).
+		Limit(2000).String()
+	var results []ErrorInstancePropagation
+	sql := fmt.Sprintf(SQL_GET_INSTANCE_ERROR_PROPAGATION, ch.database, queryBuilder.String(), bySql, startTime, endTime, startTime, endTime)
+	if err := ch.conn.Select(context.Background(), &results, sql, queryBuilder.values...); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
 // 查询实例相关的错误传播链
 func (ch *chRepo) ListErrorPropagation(req *request.GetErrorInstanceRequest) ([]ErrorInstancePropagation, error) {
 	startTime := req.StartTime / 1000000
@@ -78,4 +100,8 @@ type ErrorInstancePropagation struct {
 	ChildServices   []string  `ch:"child_services"`
 	ChildInstances  []string  `ch:"child_instances"`
 	ChildTraced     []bool    `ch:"child_traced"`
+}
+
+type ErrorPropation struct {
+	
 }

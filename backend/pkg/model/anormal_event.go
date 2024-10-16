@@ -10,7 +10,7 @@ const (
 	AnormalTypeAlertInfra
 	AnormalTypeAlertNet
 
-	AnormalTypeExceptionJAVA
+	AnormalTypeError
 )
 
 // AnormalEvent 存储通用的异常事件,用于告警分析时汇总各种类型告警,统一返回

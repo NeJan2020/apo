@@ -54,6 +54,31 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 		endpoints = append(endpoints, endpoint)
 	}
 
+	// 返回结果列表
+	var anormalEventList []model.AnormalEvent
+
+	// 获取匹配的Exception
+	propagations, err := s.chRepo.ListErrorByEntryService(req.StartTime, req.EndTime, req.Service, req.Endpoint)
+	for _, propagation := range propagations {
+		// TODO 找到propagation对应的instance
+		anormalEventList = append(anormalEventList, model.AnormalEvent{
+			Timestamp:   propagation.Timestamp.UnixMicro(),
+			AnormalType: model.AnormalTypeError,
+			ImpactEndpoints: []model.AnormalEventDetail{
+				{
+					EndpointKey: model.EndpointKey{
+						ServiceName: propagation.Service,
+						ContentKey:  propagation,
+					},
+					AlertObject:  "",
+					AlertReason:  "",
+					AlertMessage: "",
+				},
+			},
+		})
+
+	}
+
 	// 获取匹配的alertEvents
 	alertEvents, _, err := s.chRepo.GetAlertEventsByInstanceAndEndpoints(
 		startTime, endTime,
@@ -64,15 +89,27 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 	if err != nil {
 		return nil, err
 	}
+	anormalAlerts := s.parseAlertEvents(alertEvents, instanceMap)
 
+	// TODO 获取Log错误数
+	anormalEventList = append(anormalEventList, anormalAlerts...)
+
+	sort.SliceStable(anormalEventList, func(i, j int) bool {
+		return anormalEventList[i].Timestamp < anormalEventList[j].Timestamp
+	})
+
+	return &response.GetDescendantAnormalEventResponse{
+		AnormalEvents: anormalEventList,
+	}, nil
+}
+
+func (*service) parseAlertEvents(alertEvents []ck.PagedAlertEvent, instanceMap InstanceMap) []model.AnormalEvent {
 	var anormalEventList []model.AnormalEvent
-
 	for _, alertEvent := range alertEvents {
 		var anormalEvent model.AnormalEvent = model.AnormalEvent{
 			Timestamp:       alertEvent.ReceivedTime.UnixMicro(),
 			AnormalType:     0,
 			ImpactEndpoints: []model.AnormalEventDetail{},
-			// RawEvent:        alertEvent,
 		}
 		switch ck.AlertGroup(alertEvent.Group) {
 		case ck.APP_GROUP:
@@ -147,16 +184,7 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 		}
 		anormalEventList = append(anormalEventList, anormalEvent)
 	}
-
-	// TODO 获取JavaException
-	// TODO 获取Log错误数
-
-	sort.SliceStable(anormalEventList, func(i, j int) bool {
-		return anormalEventList[i].Timestamp < anormalEventList[j].Timestamp
-	})
-	return &response.GetDescendantAnormalEventResponse{
-		AnormalEvents: anormalEventList,
-	}, nil
+	return anormalEventList
 }
 
 type InstanceMap struct {

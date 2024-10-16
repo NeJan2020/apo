@@ -37,6 +37,9 @@ type Repo interface {
 	// 查询实例相关的错误传播链
 	ListErrorPropagation(req *request.GetErrorInstanceRequest) ([]ErrorInstancePropagation, error)
 
+	// 查询指定入口下发生的所有错误
+	ListErrorByEntryService(startTime, endTime int64, entryService, entryEndpoint string) ([]ErrorInstancePropagation, error)
+
 	// ========== span_trace ==========
 	GetAvailableFilterKey(startTime, endTime time.Time, needUpdate bool) ([]request.SpanTraceFilter, error)
 	UpdateFilterKey(startTime, endTime time.Time) ([]request.SpanTraceFilter, error)
