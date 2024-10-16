@@ -95,6 +95,11 @@ type Handler interface {
 	// @Tags API.alerts
 	// @Router /api/alerts/rule/available/file/group/alert [get]
 	CheckAlertRule() core.HandlerFunc
+
+	// GetAnomalySpan 获取服务和根因类型的故障报告
+	// @Tags API.service
+	// @Router /api/service/anomaly-span/list [post]
+	GetAnomalySpan() core.HandlerFunc
 }
 
 type handler struct {

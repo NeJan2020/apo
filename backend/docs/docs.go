@@ -1436,6 +1436,46 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/service/anomaly-span/list": {
+            "post": {
+                "description": "获取服务和根因类型的故障报告",
+                "consumes": [
+                    "application/x-www-form-urlencoded"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "API.service"
+                ],
+                "summary": "获取服务和根因类型的故障报告",
+                "parameters": [
+                    {
+                        "description": "请求信息",
+                        "name": "Request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/request.GetAnomalySpanRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/response.GetAnomalySpanResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/code.Failure"
+                        }
+                    }
+                }
+            }
+        },
         "/api/service/descendant/metrics": {
             "get": {
                 "description": "获取所有下游服务的延时曲线数据",
@@ -3613,8 +3653,20 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "metrics": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
                 "serviceName": {
                     "type": "string"
+                },
+                "spanId": {
+                    "type": "string"
+                },
+                "thresholdValue": {
+                    "type": "number"
                 },
                 "timestamp": {
                     "type": "integer"
@@ -4095,7 +4147,7 @@ const docTemplate = `{
                 "AnormalTypeAlertContainer",
                 "AnormalTypeAlertInfra",
                 "AnormalTypeAlertNet",
-                "AnormalTypeExceptionJAVA"
+                "AnormalTypeError"
             ]
         },
         "model.ModifyTableTTLMap": {
@@ -4393,6 +4445,45 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "request.GetAnomalySpanRequest": {
+            "type": "object",
+            "required": [
+                "contentKey",
+                "endTime",
+                "reason",
+                "service",
+                "startTime"
+            ],
+            "properties": {
+                "contentKey": {
+                    "type": "string"
+                },
+                "currentPage": {
+                    "type": "integer"
+                },
+                "endTime": {
+                    "type": "integer"
+                },
+                "isError": {
+                    "type": "string"
+                },
+                "isSlow": {
+                    "type": "string"
+                },
+                "pageSize": {
+                    "type": "integer"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "service": {
+                    "type": "string"
+                },
+                "startTime": {
+                    "type": "integer"
                 }
             }
         },
@@ -5087,6 +5178,20 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/request.AlertRule"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/model.Pagination"
+                }
+            }
+        },
+        "response.GetAnomalySpanResponse": {
+            "type": "object",
+            "properties": {
+                "list": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/clickhouse.QueryTraceResult"
                     }
                 },
                 "pagination": {

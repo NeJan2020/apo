@@ -20,6 +20,9 @@ type Service interface {
 	// SearchAnormalEventByEntry 查询入口节点下游的异常事件
 	SearchAnormalEventByEntry(req *request.GetDescendantAnormalEventRequest) (*response.GetDescendantAnormalEventResponse, error)
 
+	// GetAnomalySpan 获取可分析的异常Span
+	GetAnomalySpan(req *request.GetAnomalySpanRequest) (response.GetAnomalySpanResponse, error)
+
 	// ========================告警配置========================
 
 	// InputAlertManager 接收 AlertManager 的告警事件

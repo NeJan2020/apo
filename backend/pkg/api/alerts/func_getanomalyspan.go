@@ -1,11 +1,12 @@
-package service
+package alerts
 
 import (
+	"net/http"
+
 	"github.com/CloudDetail/apo/backend/pkg/code"
 	"github.com/CloudDetail/apo/backend/pkg/core"
 	"github.com/CloudDetail/apo/backend/pkg/model"
 	"github.com/CloudDetail/apo/backend/pkg/model/request"
-	"net/http"
 )
 
 // GetAnomalySpan 获取服务和根因类型的故障报告
@@ -39,7 +40,7 @@ func (h *handler) GetAnomalySpan() core.HandlerFunc {
 			return
 		}
 
-		resp, err := h.serviceInfoService.GetAnomalySpan(req)
+		resp, err := h.alertService.GetAnomalySpan(req)
 		if err != nil {
 			c.AbortWithError(core.Error(
 				http.StatusBadRequest,

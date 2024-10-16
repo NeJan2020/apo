@@ -1,4 +1,4 @@
-package service
+package alerts
 
 import (
 	"github.com/CloudDetail/apo/backend/pkg/model"

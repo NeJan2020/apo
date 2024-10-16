@@ -57,8 +57,6 @@ func setApiRouter(r *resource) {
 		serviceApi.GET("/alert/sample/events", serviceHandler.GetAlertEventsSample())
 
 		serviceApi.GET("/sql/metrics", serviceHandler.GetSQLMetrics())
-
-		serviceApi.POST("/anomaly-span/list", serviceHandler.GetAnomalySpan())
 	}
 
 	logApi := r.mux.Group("/api/log")
@@ -112,6 +110,7 @@ func setApiRouter(r *resource) {
 
 		alertApi.GET("/event/impact", alertHandler.AlertImpact())
 		alertApi.GET("/descendant/anormal", alertHandler.GetDescendantAnormalEvent())
+		serviceApi.POST("/anomaly-span/list", alertHandler.GetAnomalySpan())
 	}
 
 	configApi := r.mux.Group("/api/config")
