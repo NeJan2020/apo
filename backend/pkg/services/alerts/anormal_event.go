@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/CloudDetail/apo/backend/pkg/model"
@@ -26,15 +27,12 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 		return nil, err
 	}
 
+	selectedEvents := strings.Split(req.SelectedEventType, ",")
+
 	// 便于后续查询受告警影响的服务
 	var instances []*model.ServiceInstance
 	var endpoints []model.EndpointKey
-	instanceMap := InstanceMap{
-		Pod2InstanceMap:     map[K8sPodNSKey]model.ServiceInstance{},
-		NodePid2InstanceMap: map[NodePidKey]model.ServiceInstance{},
-		Node2InstancesMap:   map[string]map[model.ServiceInstance]struct{}{},
-		InstanceMap:         map[model.ServiceInstance]map[model.EndpointKey]struct{}{},
-	}
+	instanceMap := newInstanceMap()
 	for _, descendant := range descendants {
 		// 获取每个endpoint下的所有实例
 		instanceList, err := s.promRepo.GetInstanceList(req.StartTime, req.EndTime, descendant.Service, descendant.Endpoint)
@@ -57,42 +55,33 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 	// 返回结果列表
 	var anormalEventList []model.AnormalEvent
 
-	// 获取匹配的Exception
-	propagations, err := s.chRepo.ListErrorByEntryService(req.StartTime, req.EndTime, req.Service, req.Endpoint)
-	for _, propagation := range propagations {
-		// TODO 找到propagation对应的instance
-		anormalEventList = append(anormalEventList, model.AnormalEvent{
-			Timestamp:   propagation.Timestamp.UnixMicro(),
-			AnormalType: model.AnormalTypeError,
-			ImpactEndpoints: []model.AnormalEventDetail{
-				{
-					EndpointKey: model.EndpointKey{
-						ServiceName: propagation.Service,
-						ContentKey:  propagation,
-					},
-					AlertObject:  "",
-					AlertReason:  "",
-					AlertMessage: "",
-				},
-			},
-		})
+	// 获取匹配的error
+	if len(selectedEvents) == 0 || contains(selectedEvents, "error") {
+		propagations, err := s.chRepo.ListErrorByEntryService(req.StartTime, req.EndTime, req.Service, req.Endpoint, endpoints)
+		if err == nil {
+			errorEvents := s.parseErrorEvent(propagations, instanceMap)
+			// 存放error事件
+			anormalEventList = append(anormalEventList, errorEvents...)
+		}
 
 	}
 
-	// 获取匹配的alertEvents
-	alertEvents, _, err := s.chRepo.GetAlertEventsByInstanceAndEndpoints(
-		startTime, endTime,
-		request.AlertFilter{Status: "firing"},
-		instances, endpoints, nil, ck.OrderAlertByReceivedTime,
-	)
+	if len(selectedEvents) == 0 || contains(selectedEvents, "alert") {
+		// 获取匹配的alertEvents
+		alertEvents, _, err := s.chRepo.GetAlertEventsByInstanceAndEndpoints(
+			startTime, endTime,
+			request.AlertFilter{Status: "firing"},
+			instances, endpoints, nil, ck.OrderAlertByReceivedTime,
+		)
 
-	if err != nil {
-		return nil, err
+		if err == nil {
+			anormalAlerts := s.parseAlertEvents(alertEvents, instanceMap)
+			// 存放告警事件
+			anormalEventList = append(anormalEventList, anormalAlerts...)
+		}
 	}
-	anormalAlerts := s.parseAlertEvents(alertEvents, instanceMap)
 
-	// TODO 获取Log错误数
-	anormalEventList = append(anormalEventList, anormalAlerts...)
+	// TODO 获取Log错误告警事件/K8s事件等
 
 	sort.SliceStable(anormalEventList, func(i, j int) bool {
 		return anormalEventList[i].Timestamp < anormalEventList[j].Timestamp
@@ -103,7 +92,45 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 	}, nil
 }
 
-func (*service) parseAlertEvents(alertEvents []ck.PagedAlertEvent, instanceMap InstanceMap) []model.AnormalEvent {
+func (*service) parseErrorEvent(propagations []ck.ErrorPropation, instanceMap *InstanceMap) []model.AnormalEvent {
+	var anormalEventList []model.AnormalEvent
+	for _, propagation := range propagations {
+		errorEvent := model.AnormalEvent{
+			Timestamp:   propagation.Timestamp.UnixMicro(),
+			AnormalType: model.AnormalTypeError,
+		}
+		for idx, service := range propagation.NodesService {
+			if !propagation.NodesIsError[idx] {
+				continue
+			}
+			// 检查数据存在,防止数组越界
+			if len(propagation.NodesUrl) <= idx ||
+				len(propagation.NodesInstance) <= idx ||
+				len(propagation.NodesErrorTypes) <= idx ||
+				len(propagation.NodesErrorMsgs) <= idx {
+				break
+			}
+			endpointKey := model.EndpointKey{
+				ServiceName: service,
+				ContentKey:  propagation.NodesUrl[idx],
+			}
+			// 检查ContentKey是否在endpoints中
+			if !instanceMap.IsEndpointKeyExist(endpointKey) {
+				continue
+			}
+			errorEvent.ImpactEndpoints = append(errorEvent.ImpactEndpoints, model.AnormalEventDetail{
+				EndpointKey:  endpointKey,
+				AlertObject:  propagation.NodesInstance[idx],
+				AlertReason:  strings.Join(propagation.NodesErrorTypes[idx], ";"),
+				AlertMessage: strings.Join(propagation.NodesErrorMsgs[idx], ";"),
+			})
+		}
+		anormalEventList = append(anormalEventList, errorEvent)
+	}
+	return anormalEventList
+}
+
+func (*service) parseAlertEvents(alertEvents []ck.PagedAlertEvent, instanceMap *InstanceMap) []model.AnormalEvent {
 	var anormalEventList []model.AnormalEvent
 	for _, alertEvent := range alertEvents {
 		var anormalEvent model.AnormalEvent = model.AnormalEvent{
@@ -193,6 +220,8 @@ type InstanceMap struct {
 	Node2InstancesMap   map[string]map[model.ServiceInstance]struct{}
 
 	InstanceMap map[model.ServiceInstance]map[model.EndpointKey]struct{}
+
+	EndpointMap map[model.EndpointKey]struct{}
 }
 
 type NodePidKey struct {
@@ -205,7 +234,19 @@ type K8sPodNSKey struct {
 	Pod       string
 }
 
+func newInstanceMap() *InstanceMap {
+	return &InstanceMap{
+		Pod2InstanceMap:     map[K8sPodNSKey]model.ServiceInstance{},
+		NodePid2InstanceMap: map[NodePidKey]model.ServiceInstance{},
+		Node2InstancesMap:   map[string]map[model.ServiceInstance]struct{}{},
+		InstanceMap:         map[model.ServiceInstance]map[model.EndpointKey]struct{}{},
+		EndpointMap:         map[model.EndpointKey]struct{}{},
+	}
+}
+
 func (m *InstanceMap) AddInstances(endpointKey model.EndpointKey, instances []*model.ServiceInstance) {
+	m.EndpointMap[endpointKey] = struct{}{}
+
 	for _, instance := range instances {
 		endpointKeys, find := m.InstanceMap[*instance]
 		if !find {
@@ -240,6 +281,9 @@ func (m *InstanceMap) GetEndpointsByK8sPodNS(pod, namespace string) (*model.Serv
 	}
 
 	endpointsMap, find := m.InstanceMap[instance]
+	if !find {
+		return nil, nil
+	}
 	var endpoints []model.EndpointKey
 	for endpoint := range endpointsMap {
 		endpoints = append(endpoints, endpoint)
@@ -262,6 +306,9 @@ func (m *InstanceMap) GetEndpointsByNodePid(node string, pid string) (*model.Ser
 	}
 
 	endpointsMap, find := m.InstanceMap[instance]
+	if !find {
+		return nil, nil
+	}
 	var endpoints []model.EndpointKey
 	for endpoint := range endpointsMap {
 		endpoints = append(endpoints, endpoint)
@@ -290,4 +337,18 @@ func (m *InstanceMap) GetEndpointsByNode(node string) map[model.ServiceInstance]
 	}
 
 	return res
+}
+
+func (m *InstanceMap) IsEndpointKeyExist(endpointKey model.EndpointKey) bool {
+	_, find := m.EndpointMap[endpointKey]
+	return find
+}
+
+func contains(arr []string, str string) bool {
+	for _, v := range arr {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }

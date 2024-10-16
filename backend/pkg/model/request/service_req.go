@@ -26,6 +26,8 @@ type GetDescendantAnormalEventRequest struct {
 	EndTime   int64  `form:"endTime" binding:"required,gtfield=StartTime"` // 查询结束时间
 	Service   string `form:"service" binding:"required"`                   // 查询服务名
 	Endpoint  string `form:"endpoint" binding:"required"`                  // 查询Endpoint
+
+	SelectedEventType string `form:"anormalEventType"` //要查询的异常类型
 }
 
 type GetPolarisInferRequest struct {
@@ -186,4 +188,3 @@ type GetAnomalySpanRequest struct {
 	IsError    string `json:"isError"`
 	*PageParam `json:",inline"`
 }
-
