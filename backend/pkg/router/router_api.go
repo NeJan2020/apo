@@ -2,6 +2,7 @@ package router
 
 import (
 	"github.com/CloudDetail/apo/backend/internal/api/mock"
+	"github.com/CloudDetail/apo/backend/pkg/api/alertanalyze"
 	"github.com/CloudDetail/apo/backend/pkg/api/alerts"
 	"github.com/CloudDetail/apo/backend/pkg/api/config"
 	"github.com/CloudDetail/apo/backend/pkg/api/log"
@@ -108,9 +109,10 @@ func setApiRouter(r *resource) {
 		alertApi.POST("/alertmanager/receiver", alertHandler.UpdateAlertManagerConfigReceiver())
 		alertApi.DELETE("/alertmanager/receiver", alertHandler.DeleteAlertManagerConfigReceiver())
 
-		alertApi.GET("/event/impact", alertHandler.AlertImpact())
-		alertApi.GET("/descendant/anormal", alertHandler.GetDescendantAnormalEvent())
-		serviceApi.POST("/anomaly-span/list", alertHandler.GetAnomalySpan())
+		alertanalyzeHandler := alertanalyze.New(r.logger, r.ch, r.pkg_db, r.prom)
+		alertApi.GET("/event/impact", alertanalyzeHandler.GetAlertImpact())
+		alertApi.GET("/descendant/anormal", alertanalyzeHandler.GetDescendantAnormalEvent())
+		serviceApi.POST("/anomaly-span/list", alertanalyzeHandler.GetAnomalySpan())
 	}
 
 	configApi := r.mux.Group("/api/config")

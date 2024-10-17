@@ -1,4 +1,4 @@
-package alerts
+package alertanalyze
 
 import (
 	"errors"
@@ -17,7 +17,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// AlertImpact 获取告警数据的影响面
+// GetAlertImpact 获取告警数据的影响面
 // @Summary 获取告警数据的影响面
 // @Description 获取告警数据的影响面
 // @Tags API.alerts
@@ -30,7 +30,7 @@ import (
 // @Success 200 {object} []response.GetServiceEntryEndpointsResponse
 // @Failure 400 {object} code.Failure
 // @Router /api/alerts/event/impact [get]
-func (h *handler) AlertImpact() core.HandlerFunc {
+func (h *handler) GetAlertImpact() core.HandlerFunc {
 	return func(c core.Context) {
 		req := new(request.AlertImpactRequest)
 		if err := c.ShouldBindQuery(req); err != nil {
@@ -42,7 +42,7 @@ func (h *handler) AlertImpact() core.HandlerFunc {
 			return
 		}
 
-		entryNodes, err := h.alertService.AlertImpact(req.EventID, req.StartTime, req.EndTime)
+		entryNodes, err := h.alertanalyzeService.AlertImpact(req.EventID, req.StartTime, req.EndTime)
 		if err != nil {
 			var vErr model.ErrAlertImpactMissingTag
 			var vErr2 model.ErrAlertImpactNoMatchedService

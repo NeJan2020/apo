@@ -1,4 +1,4 @@
-package alerts
+package alertanalyze
 
 import (
 	"net/http"
@@ -34,7 +34,7 @@ func (h *handler) GetDescendantAnormalEvent() core.HandlerFunc {
 			return
 		}
 
-		resp, err := h.alertService.SearchAnormalEventByEntry(req)
+		resp, err := h.alertanalyzeService.SearchAnormalEventByEntry(req)
 		if err != nil {
 			c.AbortWithError(core.Error(
 				http.StatusBadRequest,

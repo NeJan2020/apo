@@ -1,4 +1,4 @@
-package alerts
+package alertanalyze
 
 import (
 	"github.com/CloudDetail/apo/backend/pkg/model"

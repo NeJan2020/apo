@@ -1,4 +1,4 @@
-package alerts
+package alertanalyze
 
 import (
 	"fmt"
@@ -13,6 +13,12 @@ import (
 	ck "github.com/CloudDetail/apo/backend/pkg/repository/clickhouse"
 )
 
+const (
+	alertEventPrefix = "alert-"
+	errorEvent       = "error"
+)
+
+// SearchAnormalEventByEntry 基于入口查询异常事件
 func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEventRequest) (*response.GetDescendantAnormalEventResponse, error) {
 	startTime := time.UnixMicro(req.StartTime)
 	endTime := time.UnixMicro(req.EndTime)
@@ -27,7 +33,7 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 		return nil, err
 	}
 
-	selectedEvents := strings.Split(req.SelectedEventType, ",")
+	selectedEvents := strings.Split(req.AnormalTypes, ",")
 
 	// 便于后续查询受告警影响的服务
 	var instances []*model.ServiceInstance
@@ -56,7 +62,7 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 	var anormalEventList []model.AnormalEvent
 
 	// 获取匹配的error
-	if len(selectedEvents) == 0 || contains(selectedEvents, "error") {
+	if len(selectedEvents) == 0 || contains(selectedEvents, errorEvent) {
 		propagations, err := s.chRepo.ListErrorByEntryService(req.StartTime, req.EndTime, req.Service, req.Endpoint, endpoints)
 		if err == nil {
 			errorEvents := s.parseErrorEvent(propagations, instanceMap)
@@ -66,7 +72,7 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 
 	}
 
-	if len(selectedEvents) == 0 || contains(selectedEvents, "alert") {
+	if len(selectedEvents) == 0 || hasPrefix(selectedEvents, alertEventPrefix) {
 		// 获取匹配的alertEvents
 		alertEvents, _, err := s.chRepo.GetAlertEventsByInstanceAndEndpoints(
 			startTime, endTime,
@@ -75,7 +81,7 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 		)
 
 		if err == nil {
-			anormalAlerts := s.parseAlertEvents(alertEvents, instanceMap)
+			anormalAlerts := s.parseAlertEvents(alertEvents, instanceMap, selectedEvents)
 			// 存放告警事件
 			anormalEventList = append(anormalEventList, anormalAlerts...)
 		}
@@ -130,9 +136,13 @@ func (*service) parseErrorEvent(propagations []ck.ErrorPropation, instanceMap *I
 	return anormalEventList
 }
 
-func (*service) parseAlertEvents(alertEvents []ck.PagedAlertEvent, instanceMap *InstanceMap) []model.AnormalEvent {
+func (*service) parseAlertEvents(alertEvents []ck.PagedAlertEvent, instanceMap *InstanceMap, selectedEvents []string) []model.AnormalEvent {
 	var anormalEventList []model.AnormalEvent
 	for _, alertEvent := range alertEvents {
+		if !contains(selectedEvents, alertEventPrefix+alertEvent.Group) {
+			continue
+		}
+
 		var anormalEvent model.AnormalEvent = model.AnormalEvent{
 			Timestamp:       alertEvent.ReceivedTime.UnixMicro(),
 			AnormalType:     0,
@@ -347,6 +357,15 @@ func (m *InstanceMap) IsEndpointKeyExist(endpointKey model.EndpointKey) bool {
 func contains(arr []string, str string) bool {
 	for _, v := range arr {
 		if v == str {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPrefix(arr []string, str string) bool {
+	for _, v := range arr {
+		if strings.HasPrefix(v, str) {
 			return true
 		}
 	}

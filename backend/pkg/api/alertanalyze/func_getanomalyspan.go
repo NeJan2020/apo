@@ -1,4 +1,4 @@
-package alerts
+package alertanalyze
 
 import (
 	"net/http"
@@ -40,7 +40,7 @@ func (h *handler) GetAnomalySpan() core.HandlerFunc {
 			return
 		}
 
-		resp, err := h.alertService.GetAnomalySpan(req)
+		resp, err := h.alertanalyzeService.GetAnomalySpan(req)
 		if err != nil {
 			c.AbortWithError(core.Error(
 				http.StatusBadRequest,
