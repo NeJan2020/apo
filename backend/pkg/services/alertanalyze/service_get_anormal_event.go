@@ -139,7 +139,7 @@ func (*service) parseErrorEvent(propagations []ck.ErrorPropation, instanceMap *I
 func (*service) parseAlertEvents(alertEvents []ck.PagedAlertEvent, instanceMap *InstanceMap, selectedEvents []string) []model.AnormalEvent {
 	var anormalEventList []model.AnormalEvent
 	for _, alertEvent := range alertEvents {
-		if !contains(selectedEvents, alertEventPrefix+alertEvent.Group) {
+		if len(selectedEvents) > 0 && !contains(selectedEvents, alertEventPrefix+alertEvent.Group) {
 			continue
 		}
 
