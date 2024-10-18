@@ -33,7 +33,10 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 		return nil, err
 	}
 
-	selectedEvents := strings.Split(req.AnormalTypes, ",")
+	var selectedEvents []string
+	if len(req.AnormalTypes) > 0 {
+		selectedEvents = strings.Split(req.AnormalTypes, ",")
+	}
 
 	// 便于后续查询受告警影响的服务
 	var instances []*model.ServiceInstance
