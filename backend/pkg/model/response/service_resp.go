@@ -234,9 +234,8 @@ func (v *K8sEventCountValues) AddCount(dao clickhouse.K8sEventsCount) {
 }
 
 type GetAlertEventsResponse struct {
-	TotalCount int `json:"totalCount"`
-
-	EventList []clickhouse.PagedAlertEvent `json:"events"`
+	EventList  []clickhouse.PagedAlertEvent `json:"events"`
+	Pagination *model.Pagination            `json:"pagination"`
 }
 
 type GetAlertEventsSampleResponse struct {

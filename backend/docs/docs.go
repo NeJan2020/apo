@@ -218,6 +218,13 @@ const docTemplate = `{
                         "name": "endpoint",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "异常事件类型过滤",
+                        "name": "anormalTypes",
+                        "in": "query",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -5121,8 +5128,8 @@ const docTemplate = `{
                         "$ref": "#/definitions/clickhouse.PagedAlertEvent"
                     }
                 },
-                "totalCount": {
-                    "type": "integer"
+                "pagination": {
+                    "$ref": "#/definitions/model.Pagination"
                 }
             }
         },

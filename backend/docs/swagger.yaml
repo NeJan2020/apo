@@ -1244,8 +1244,8 @@ definitions:
         items:
           $ref: '#/definitions/clickhouse.PagedAlertEvent'
         type: array
-      totalCount:
-        type: integer
+      pagination:
+        $ref: '#/definitions/model.Pagination'
     type: object
   response.GetAlertEventsSampleResponse:
     properties:
@@ -2060,6 +2060,11 @@ paths:
       - description: 查询Endpoint
         in: query
         name: endpoint
+        required: true
+        type: string
+      - description: 异常事件类型过滤
+        in: query
+        name: anormalTypes
         required: true
         type: string
       produces:

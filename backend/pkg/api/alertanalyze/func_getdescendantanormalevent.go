@@ -19,6 +19,7 @@ import (
 // @Param endTime query int64 true "查询结束时间"
 // @Param service query string true "查询服务名"
 // @Param endpoint query string true "查询Endpoint"
+// @Param anormalTypes query string true "异常事件类型过滤"
 // @Success 200 {object} response.GetDescendantAnormalEventResponse
 // @Failure 400 {object} code.Failure
 // @Router /api/alerts/descendant/anormal [get]

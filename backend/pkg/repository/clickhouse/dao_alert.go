@@ -159,7 +159,12 @@ var (
 // GetAlertEvents 取出时间范围内的输入实例的所有告警事件
 // instances为空时,不返回任何告警
 func (ch *chRepo) GetAlertEvents(startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance, pageParam *request.PageParam, sortBy string) ([]PagedAlertEvent, int, error) {
-	whereInstance := extractFilter(filter, nil, instances)
+	var whereInstance *whereSQL
+	if len(filter.Service) > 0 || len(filter.Endpoint) > 0 || len(instances) > 0 {
+		whereInstance = extractFilter(filter, nil, instances)
+	} else {
+		whereInstance = ALWAYS_TRUE
+	}
 	return ch.getAlertEventsByWhere(startTime, endTime, filter, whereInstance, sortBy, pageParam)
 }
 

@@ -46,10 +46,21 @@ func (s *service) GetAlertEventsSample(req *request.GetAlertEventsSampleRequest)
 }
 
 func (s *service) GetAlertEvents(req *request.GetAlertEventsRequest) (*response.GetAlertEventsResponse, error) {
+	if req.PageParam == nil {
+		req.PageParam = &request.PageParam{
+			CurrentPage: 1,
+			PageSize:    999,
+		}
+	}
+
 	// 查询Service所属实例
-	instances, err := s.promRepo.GetActiveInstanceList(req.StartTime, req.EndTime, req.Service)
-	if err != nil {
-		return nil, err
+	var instances []*model.ServiceInstance
+	if len(req.Service) > 0 {
+		instanceList, err := s.promRepo.GetActiveInstanceList(req.StartTime, req.EndTime, req.Service)
+		if err != nil {
+			return nil, err
+		}
+		instances = instanceList.GetInstances()
 	}
 
 	startTime := time.UnixMicro(req.StartTime)
@@ -63,7 +74,7 @@ func (s *service) GetAlertEvents(req *request.GetAlertEventsRequest) (*response.
 	events, totalCount, err := s.chRepo.GetAlertEvents(
 		startTime, endTime,
 		req.AlertFilter,
-		instances.GetInstances(),
+		instances,
 		req.PageParam,
 		req.SortBy,
 	)
@@ -73,8 +84,12 @@ func (s *service) GetAlertEvents(req *request.GetAlertEventsRequest) (*response.
 
 	// HACK 直接以列表形式返回数据
 	return &response.GetAlertEventsResponse{
-		TotalCount: totalCount,
-		EventList:  events,
+		Pagination: &model.Pagination{
+			Total:       int64(totalCount),
+			CurrentPage: req.CurrentPage,
+			PageSize:    req.PageSize,
+		},
+		EventList: events,
 	}, nil
 }
 
