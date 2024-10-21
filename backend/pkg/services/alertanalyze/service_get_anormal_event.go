@@ -91,13 +91,50 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 	}
 
 	// TODO 获取Log错误告警事件/K8s事件等
-
 	sort.SliceStable(anormalEventList, func(i, j int) bool {
 		return anormalEventList[i].Timestamp < anormalEventList[j].Timestamp
 	})
 
+	// 按Step分组并生成Chart
+	anormalCount := response.TempChartObject{
+		ChartData: map[int64]float64{},
+	}
+	anormalEventTimeGroup := make(map[int64][]model.AnormalEvent)
+
+	tmpGroupStart := startTime
+	tmpGroupCount := 0
+	for i, event := range anormalEventList {
+		for event.Timestamp > tmpGroupStart.UnixMicro()+2*req.Step {
+			// 补足空白部分
+			anormalCount.ChartData[tmpGroupStart.UnixMicro()] = 0
+			anormalEventTimeGroup[tmpGroupStart.UnixMicro()] = []model.AnormalEvent{}
+			tmpGroupStart = tmpGroupStart.Add(time.Duration(req.Step) * time.Microsecond)
+		}
+
+		if i == len(anormalEventList)-1 {
+			anormalCount.ChartData[tmpGroupStart.UnixMicro()] = float64(tmpGroupCount + 1)
+			anormalEventTimeGroup[tmpGroupStart.UnixMicro()] = anormalEventList[i-tmpGroupCount:]
+			tmpGroupStart = tmpGroupStart.Add(time.Duration(req.Step) * time.Microsecond)
+
+			// 补充剩余部分
+			for tmpGroupStart.Before(endTime) {
+				anormalCount.ChartData[tmpGroupStart.UnixMicro()] = 0
+				anormalEventTimeGroup[tmpGroupStart.UnixMicro()] = []model.AnormalEvent{}
+				tmpGroupStart = tmpGroupStart.Add(time.Duration(req.Step) * time.Microsecond)
+			}
+		} else if event.Timestamp > tmpGroupStart.UnixMicro()+req.Step {
+			anormalCount.ChartData[tmpGroupStart.UnixMicro()] = float64(tmpGroupCount)
+			anormalEventTimeGroup[tmpGroupStart.UnixMicro()] = anormalEventList[i-tmpGroupCount : i]
+			tmpGroupCount = 1
+			tmpGroupStart = tmpGroupStart.Add(time.Duration(req.Step) * time.Microsecond)
+		} else {
+			tmpGroupCount++
+		}
+	}
+
 	return &response.GetDescendantAnormalEventResponse{
-		AnormalEvents: anormalEventList,
+		AnormalEvents: anormalEventTimeGroup,
+		AnormalCount:  anormalCount,
 	}, nil
 }
 

@@ -7,7 +7,9 @@ import (
 )
 
 type GetDescendantAnormalEventResponse struct {
-	AnormalEvents []model.AnormalEvent `json:"anormalEvents"`
+	// AnormalEvents []model.AnormalEvent `json:"anormalEvents"`
+	AnormalEvents map[int64][]model.AnormalEvent `json:"anormalEvents"`
+	AnormalCount  TempChartObject                `json:"anormalCount"`
 }
 
 type GetAlertRuleFileResponse struct {

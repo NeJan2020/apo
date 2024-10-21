@@ -26,6 +26,7 @@ type GetDescendantAnormalEventRequest struct {
 	EndTime   int64  `form:"endTime" binding:"required,gtfield=StartTime"` // 查询结束时间
 	Service   string `form:"service" binding:"required"`                   // 查询服务名
 	Endpoint  string `form:"endpoint" binding:"required"`                  // 查询Endpoint
+	Step      int64  `form:"step" binding:"min=1000000"`                   // 查询步长(us)
 
 	AnormalTypes string `form:"anormalTypes"` //要查询的异常类型
 }

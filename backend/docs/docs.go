@@ -206,6 +206,13 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "type": "integer",
+                        "description": "查询步长(us)",
+                        "name": "step",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
                         "type": "string",
                         "description": "查询服务名",
                         "name": "service",
@@ -5209,10 +5216,17 @@ const docTemplate = `{
         "response.GetDescendantAnormalEventResponse": {
             "type": "object",
             "properties": {
+                "anormalCount": {
+                    "$ref": "#/definitions/response.TempChartObject"
+                },
                 "anormalEvents": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/model.AnormalEvent"
+                    "description": "AnormalEvents []model.AnormalEvent ` + "`" + `json:\"anormalEvents\"` + "`" + `",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/definitions/model.AnormalEvent"
+                        }
                     }
                 }
             }
