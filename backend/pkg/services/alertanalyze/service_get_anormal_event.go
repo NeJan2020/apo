@@ -42,6 +42,8 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 	var instances []*model.ServiceInstance
 	var endpoints []model.EndpointKey
 	instanceMap := newInstanceMap()
+	// TODO 优化,减少查询次数
+
 	for _, descendant := range descendants {
 		// 获取每个endpoint下的所有实例
 		instanceList, err := s.promRepo.GetInstanceList(req.StartTime, req.EndTime, descendant.Service, descendant.Endpoint)

@@ -19,9 +19,9 @@ const (
 	NamespacePQLFilter   = "namespace="
 	ContainerIdPQLFilter = "container_id="
 	IsErrorPQLFilter     = "is_error="
-	NodeNamePQLFilter    = "node_name="
 	PodPQLFilter         = "pod="
 	PidPQLFilter         = "pid="
+	NodePQLFilter        = "node="
 
 	ContentKeyRegexPQLFilter = "content_key=~"
 	ServiceRegexPQLFilter    = "svc_name=~"
