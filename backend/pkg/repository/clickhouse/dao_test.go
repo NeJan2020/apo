@@ -120,12 +120,15 @@ func testDescendantNodes(t *testing.T, repo Repo) {
 
 func testDescendantRelations(t *testing.T, repo Repo) {
 	req := &request.GetServiceEndpointRelationRequest{
-		StartTime: 1723514677000000,
-		EndTime:   1723515577000000,
-		Service:   "ts-seat-service",
-		Endpoint:  "POST /api/v1/seatservice/seats/left_tickets",
+		GetServiceEndpointTopologyRequest: request.GetServiceEndpointTopologyRequest{
+			StartTime: 1723514677000000,
+			EndTime:   1723515577000000,
+			Service:   "ts-seat-service",
+			Endpoint:  "POST /api/v1/seatservice/seats/left_tickets",
+		},
+		WithTopologyLevel: false,
 	}
-	resp, err := repo.ListDescendantRelations(req)
+	resp, err := repo.ListDescendantRelations(&req.GetServiceEndpointTopologyRequest)
 	if err != nil {
 		t.Errorf("Error to list descendant relation: %v", err)
 	}
