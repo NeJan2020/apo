@@ -70,7 +70,7 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 	if len(selectedEvents) == 0 || contains(selectedEvents, errorEvent) {
 		propagations, err := s.chRepo.ListErrorByEntryService(req.StartTime, req.EndTime, req.Service, req.Endpoint, endpoints)
 		if err == nil {
-			errorEvents := s.parseErrorEvent(propagations, instanceMap)
+			errorEvents := s.parseErrorEvent(propagations, instanceMap, req.Step)
 			// 存放error事件
 			anormalEventList = append(anormalEventList, errorEvents...)
 		} else {
@@ -208,14 +208,18 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 			for _, impactEndpoint := range event.ImpactEndpoints {
 				var hasStarted bool
 				for _, ts := range deltaEventTS {
+					if event.AnormalType == model.AnormalTypeError && ts.AnormalStatus == model.StatusResolved {
+						continue // 不记录Error事件的Resolved
+					}
 					var anormalStatus string
 					if isFiringBefore == model.StatusFiring && ts.AnormalStatus == model.StatusFiring ||
-						hasStarted && isFiringBefore == model.StatusFiring {
+						hasStarted && isFiringBefore == model.StatusFiring && ts.AnormalStatus == model.StatusFiring {
 						anormalStatus = "updatedFiring"
 					} else if isFiringBefore == model.StatusResolved && ts.AnormalStatus == model.StatusFiring {
 						anormalStatus = "startFiring"
 						hasStarted = true
-					} else if isFiringBefore == model.StatusFiring && ts.AnormalStatus == model.StatusResolved {
+					} else if isFiringBefore == model.StatusFiring && ts.AnormalStatus == model.StatusResolved ||
+						hasStarted && ts.AnormalStatus == model.StatusResolved {
 						anormalStatus = "resolved"
 					}
 
@@ -391,7 +395,7 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 // 	return anormalEventList, nil
 // }
 
-func (*service) parseErrorEvent(propagations []ck.ErrorPropation, instanceMap *InstanceMap) []model.AnormalEvent {
+func (*service) parseErrorEvent(propagations []ck.ErrorPropation, instanceMap *InstanceMap, step int64) []model.AnormalEvent {
 	var anormalEventList []model.AnormalEvent
 	for _, propagation := range propagations {
 		errorEvent := model.AnormalEvent{
@@ -403,7 +407,7 @@ func (*service) parseErrorEvent(propagations []ck.ErrorPropation, instanceMap *I
 				{
 					// 自定义一个一分钟结束的状态
 					AnormalStatus: model.StatusResolved,
-					Timestamp:     propagation.Timestamp.Add(time.Minute).UnixMicro(),
+					Timestamp:     propagation.Timestamp.Add(time.Duration(step * 1000)).UnixMicro(),
 				},
 			},
 			AnormalType:     model.AnormalTypeError,
