@@ -111,7 +111,7 @@ func setApiRouter(r *resource) {
 
 		alertanalyzeHandler := alertanalyze.New(r.logger, r.ch, r.pkg_db, r.prom)
 		alertApi.GET("/event/impact", alertanalyzeHandler.GetAlertImpact())
-		alertApi.GET("/descendant/anormal/delta", alertanalyzeHandler.GetDescendantAnormalEvent())
+		alertApi.POST("/descendant/anormal/delta", alertanalyzeHandler.GetDescendantAnormalEvent())
 		serviceApi.POST("/anomaly-span/list", alertanalyzeHandler.GetAnomalySpan())
 	}
 
