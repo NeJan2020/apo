@@ -203,6 +203,8 @@ definitions:
         type: string
       isError:
         type: boolean
+      isSlow:
+        type: boolean
       labels:
         additionalProperties:
           type: string
@@ -211,6 +213,8 @@ definitions:
         additionalProperties:
           type: integer
         type: object
+      reason:
+        type: string
       serviceName:
         type: string
       spanId:
@@ -768,7 +772,6 @@ definitions:
     required:
     - contentKey
     - endTime
-    - reason
     - service
     - startTime
     type: object
@@ -2920,7 +2923,7 @@ paths:
             $ref: '#/definitions/code.Failure'
       summary: 获取服务和根因类型的故障报告
       tags:
-      - API.service
+      - API.alert
   /api/service/descendant/metrics:
     get:
       consumes:
