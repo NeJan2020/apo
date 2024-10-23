@@ -1,10 +1,12 @@
 package alertanalyze
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/CloudDetail/apo/backend/pkg/code"
 	"github.com/CloudDetail/apo/backend/pkg/core"
+	"github.com/CloudDetail/apo/backend/pkg/model"
 
 	"github.com/CloudDetail/apo/backend/pkg/model/request"
 )
@@ -23,11 +25,11 @@ import (
 // @Param anormalTypes query string true "异常事件类型过滤"
 // @Success 200 {object} response.GetDescendantAnormalEventResponse
 // @Failure 400 {object} code.Failure
-// @Router /api/alerts/descendant/anormal [get]
+// @Router /api/alerts/descendant/anormal/delta [post]
 func (h *handler) GetDescendantAnormalEvent() core.HandlerFunc {
 	return func(c core.Context) {
 		req := new(request.GetDescendantAnormalEventRequest)
-		if err := c.ShouldBindQuery(req); err != nil {
+		if err := c.ShouldBindJSON(req); err != nil {
 			c.AbortWithError(core.Error(
 				http.StatusBadRequest,
 				code.ParamBindError,
@@ -38,12 +40,22 @@ func (h *handler) GetDescendantAnormalEvent() core.HandlerFunc {
 
 		resp, err := h.alertanalyzeService.SearchAnormalEventByEntry(req)
 		if err != nil {
-			c.AbortWithError(core.Error(
-				http.StatusBadRequest,
-				code.AlertAnalyzeDescendantAnormalEventError,
-				code.Text(code.AlertAnalyzeDescendantAnormalEventError),
-			).WithError(err))
-			return
+			var vErr model.ErrMutationCheckFailed
+			if errors.As(err, &vErr) {
+				c.AbortWithError(core.Error(
+					http.StatusBadRequest,
+					code.MutationPQLCheckFailed,
+					code.Text(code.MutationPQLCheckFailed),
+				).WithError(err))
+				return
+			} else {
+				c.AbortWithError(core.Error(
+					http.StatusBadRequest,
+					code.AlertAnalyzeDescendantAnormalEventError,
+					code.Text(code.AlertAnalyzeDescendantAnormalEventError),
+				).WithError(err))
+				return
+			}
 		}
 		c.Payload(resp)
 	}

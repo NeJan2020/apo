@@ -44,6 +44,9 @@ type Repo interface {
 	QueryErrorRateData(searchTime time.Time, query string) ([]MetricResult, error)
 	QueryRangeErrorData(startTime time.Time, endTime time.Time, query string, step time.Duration) ([]MetricResult, error)
 
+	// ========= Mutation Check =========
+	ExecutedMutationCheck(c *MutationPQLCheck, startTime, endTime time.Time, step time.Duration) ([]MetricResult, error)
+
 	// ========== originx_logparser_level_count_total Start ==========
 	// 查询实例日志Error数
 	QueryLogCountByInstanceId(instance *model.ServiceInstance, startTime int64, endTime int64, step int64) (map[int64]float64, error)

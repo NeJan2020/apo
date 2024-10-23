@@ -2,7 +2,6 @@ package alertanalyze
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +15,7 @@ import (
 const (
 	alertEventPrefix = "alert-"
 	errorEvent       = "error"
+	mutationEvent    = "mutation"
 )
 
 // SearchAnormalEventByEntry 基于入口查询异常事件
@@ -73,79 +73,341 @@ func (s *service) SearchAnormalEventByEntry(req *request.GetDescendantAnormalEve
 			errorEvents := s.parseErrorEvent(propagations, instanceMap)
 			// 存放error事件
 			anormalEventList = append(anormalEventList, errorEvents...)
+		} else {
+			return nil, err
 		}
-
 	}
 
 	if len(selectedEvents) == 0 || hasPrefix(selectedEvents, alertEventPrefix) {
 		// 获取匹配的alertEvents
-		alertEvents, _, err := s.chRepo.GetAlertEventsByInstanceAndEndpoints(
+		alertEvents, err := s.chRepo.GetAlertEventsWithKeyByInstanceAndEndpoints(
 			startTime, endTime,
-			request.AlertFilter{Status: "firing"},
-			instances, endpoints, nil, ck.OrderAlertByReceivedTime,
+			// 同时获取Firing和Resolved故障
+			request.AlertFilter{},
+			instances, endpoints,
 		)
 
 		if err == nil {
-			anormalAlerts := s.parseAlertEvents(alertEvents, instanceMap, selectedEvents)
+			anormalAlerts := s.parseAlertEvents(alertEvents, instanceMap, selectedEvents, req.StartTime)
 			// 存放告警事件
 			anormalEventList = append(anormalEventList, anormalAlerts...)
+		} else {
+			return nil, err
 		}
 	}
 
-	// TODO 获取Log错误告警事件/K8s事件等
-	sort.SliceStable(anormalEventList, func(i, j int) bool {
-		return anormalEventList[i].Timestamp < anormalEventList[j].Timestamp
-	})
+	// if len(req.MutataionCheckPQL) > 0 && contains(selectedEvents, mutationEvent) {
+	// 	// 用户自定义指标突变
+	// 	anormalMutations, err := s.doMutationCheck(req, startTime, endTime, instanceMap)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	anormalEventList = append(anormalEventList, anormalMutations...)
+	// }
 
-	// 按Step分组并生成Chart
+	// sort.SliceStable(anormalEventList, func(i, j int) bool {
+	// 	return anormalEventList[i].Timestamp < anormalEventList[j].Timestamp
+	// })
+
+	// 按Step分组并生成Chart, 统计每个Step时间段内未解决的异常数量
 	anormalCount := response.TempChartObject{
 		ChartData: map[int64]float64{},
 	}
-	anormalEventTimeGroup := make(map[int64][]model.AnormalEvent)
+	// 初始化
+	for i := req.StartTime; i < req.EndTime; i += req.Step {
+		anormalCount.ChartData[i] = 0
+	}
 
-	tmpGroupStart := startTime
-	tmpGroupCount := 0
-	for i, event := range anormalEventList {
-		for event.Timestamp > tmpGroupStart.UnixMicro()+2*req.Step {
-			// 补足空白部分
-			anormalCount.ChartData[tmpGroupStart.UnixMicro()] = 0
-			anormalEventTimeGroup[tmpGroupStart.UnixMicro()] = []model.AnormalEvent{}
-			tmpGroupStart = tmpGroupStart.Add(time.Duration(req.Step) * time.Microsecond)
+	originAnormalCounts := map[model.EndpointKey]map[model.AnormalType]int64{}
+	finalAnormalCounts := map[model.EndpointKey]map[model.AnormalType]int64{}
+
+	originAnormalEvents := []response.DescendantAnormalEventRecord{}
+	deltaAnormalEvents := []response.DescendantAnormalEventRecord{}
+
+	// anormalEventTimeGroup := make(map[int64][]model.AnormalEvent)
+	for _, event := range anormalEventList {
+		// status Before Firing
+		isFiringBefore := model.StatusResolved
+		lastEventTS := int64(-1)
+		isFiringAfter := model.StatusResolved
+		deltaEventTS := []model.AnormalUpdateTS{}
+
+		// 填充Chart
+		startFiring := int64(-1)
+		for updateIdx, updateTS := range event.UpdateTSs {
+			if updateIdx == len(event.UpdateTSs)-1 && updateTS.AnormalStatus == model.StatusFiring {
+				if startFiring == -1 {
+					startFiring = updateTS.Timestamp
+				}
+				for ts, count := range anormalCount.ChartData {
+					if ts+req.Step >= startFiring {
+						anormalCount.ChartData[ts] = count + 1
+					}
+				}
+			} else if startFiring == -1 && updateTS.AnormalStatus == model.StatusFiring {
+				// 新的一次告警
+				startFiring = updateTS.Timestamp
+			} else if startFiring != -1 && updateTS.AnormalStatus == model.StatusResolved {
+				// 结算之前的告警
+				for ts, count := range anormalCount.ChartData {
+					if ts+req.Step >= startFiring && ts+req.Step < updateTS.Timestamp {
+						anormalCount.ChartData[ts] = count + 1
+					}
+				}
+			}
+
+			// 统计用户时间片前的状态
+			if updateTS.Timestamp < req.DeltaStartTime {
+				isFiringBefore = updateTS.AnormalStatus
+				lastEventTS = updateTS.Timestamp
+			}
+			if updateTS.Timestamp < req.DeltaEndTime {
+				isFiringAfter = updateTS.AnormalStatus
+				if updateTS.Timestamp > req.DeltaStartTime {
+					deltaEventTS = append(deltaEventTS, updateTS)
+				}
+			}
 		}
 
-		if i == len(anormalEventList)-1 {
-			anormalCount.ChartData[tmpGroupStart.UnixMicro()] = float64(tmpGroupCount + 1)
-			anormalEventTimeGroup[tmpGroupStart.UnixMicro()] = anormalEventList[i-tmpGroupCount:]
-			tmpGroupStart = tmpGroupStart.Add(time.Duration(req.Step) * time.Microsecond)
-
-			// 补充剩余部分
-			for tmpGroupStart.Before(endTime) {
-				anormalCount.ChartData[tmpGroupStart.UnixMicro()] = 0
-				anormalEventTimeGroup[tmpGroupStart.UnixMicro()] = []model.AnormalEvent{}
-				tmpGroupStart = tmpGroupStart.Add(time.Duration(req.Step) * time.Microsecond)
+		if isFiringBefore == model.StatusFiring {
+			for _, impactEndpoints := range event.ImpactEndpoints {
+				alertCounts, find := originAnormalCounts[impactEndpoints.EndpointKey]
+				if !find {
+					alertCounts = map[model.AnormalType]int64{}
+					originAnormalCounts[impactEndpoints.EndpointKey] = alertCounts
+				}
+				alertCounts[event.AnormalType]++
 			}
-		} else if event.Timestamp > tmpGroupStart.UnixMicro()+req.Step {
-			anormalCount.ChartData[tmpGroupStart.UnixMicro()] = float64(tmpGroupCount)
-			anormalEventTimeGroup[tmpGroupStart.UnixMicro()] = anormalEventList[i-tmpGroupCount : i]
-			tmpGroupCount = 1
-			tmpGroupStart = tmpGroupStart.Add(time.Duration(req.Step) * time.Microsecond)
-		} else {
-			tmpGroupCount++
+
+			// 记录已经发生的告警事件和当时的状态
+			for _, impactEndpoint := range event.ImpactEndpoints {
+				originAnormalEvents = append(originAnormalEvents, response.DescendantAnormalEventRecord{
+					EndpointKey:   impactEndpoint.EndpointKey,
+					AnormalType:   event.AnormalType,
+					Timestamp:     lastEventTS,
+					AnormalObject: impactEndpoint.AlertObject,
+					AnormalReason: impactEndpoint.AlertReason,
+					AnormalMsg:    impactEndpoint.AlertMessage[lastEventTS],
+					AnormalStatus: "updatedFiring",
+				})
+			}
+		}
+		if isFiringAfter == model.StatusFiring {
+			for _, impactEndpoints := range event.ImpactEndpoints {
+				alertCounts, find := finalAnormalCounts[impactEndpoints.EndpointKey]
+				if !find {
+					alertCounts = map[model.AnormalType]int64{}
+					finalAnormalCounts[impactEndpoints.EndpointKey] = alertCounts
+				}
+				alertCounts[event.AnormalType]++
+			}
+		}
+
+		if len(deltaEventTS) > 0 {
+			// 记录发生变化的事件 (create / update / resolved)
+			for _, impactEndpoint := range event.ImpactEndpoints {
+				var hasStarted bool
+				for _, ts := range deltaEventTS {
+					var anormalStatus string
+					if isFiringBefore == model.StatusFiring && ts.AnormalStatus == model.StatusFiring ||
+						hasStarted && isFiringBefore == model.StatusFiring {
+						anormalStatus = "updatedFiring"
+					} else if isFiringBefore == model.StatusResolved && ts.AnormalStatus == model.StatusFiring {
+						anormalStatus = "startFiring"
+						hasStarted = true
+					} else if isFiringBefore == model.StatusFiring && ts.AnormalStatus == model.StatusResolved {
+						anormalStatus = "resolved"
+					}
+
+					deltaAnormalEvents = append(deltaAnormalEvents, response.DescendantAnormalEventRecord{
+						EndpointKey:   impactEndpoint.EndpointKey,
+						AnormalType:   event.AnormalType,
+						Timestamp:     ts.Timestamp,
+						AnormalObject: impactEndpoint.AlertObject,
+						AnormalReason: impactEndpoint.AlertReason,
+						AnormalMsg:    impactEndpoint.AlertMessage[ts.Timestamp],
+						AnormalStatus: anormalStatus,
+					})
+				}
+			}
 		}
 	}
 
+	var originAnormalCountsList = []response.DescendantAnormalCounts{}
+	for endpoint, anormalCounts := range originAnormalCounts {
+		originAnormalCountsList = append(originAnormalCountsList, response.DescendantAnormalCounts{
+			EndpointKey:      endpoint,
+			AnormalCountsMap: anormalCounts,
+		})
+	}
+
+	var finalAnormalCountsList = []response.DescendantAnormalCounts{}
+	for endpoint, anormalCounts := range finalAnormalCounts {
+		finalAnormalCountsList = append(finalAnormalCountsList, response.DescendantAnormalCounts{
+			EndpointKey:      endpoint,
+			AnormalCountsMap: anormalCounts,
+		})
+	}
+
 	return &response.GetDescendantAnormalEventResponse{
-		AnormalEvents: anormalEventTimeGroup,
-		AnormalCount:  anormalCount,
+		AnormalCount:        anormalCount,
+		OriginAnormalCounts: originAnormalCountsList,
+		FinalAnormalCounts:  finalAnormalCountsList,
+
+		OriginAnormalEvents: originAnormalEvents,
+		DeltaAnormalEvents:  deltaAnormalEvents,
 	}, nil
 }
+
+// func (s *service) doMutationCheck(req *request.GetDescendantAnormalEventRequest, startTime time.Time, endTime time.Time, instanceMap *InstanceMap) ([]model.AnormalEvent, error) {
+// 	mutationCheck := &prometheus.MutationPQLCheck{
+// 		PQL:        req.MutataionCheckPQL,
+// 		UpperLimit: req.MutationUpperLimit,
+// 		LowerLimit: req.MutationLowerLimit,
+// 	}
+// 	mutationSeries, err := s.promRepo.ExecutedMutationCheck(
+// 		mutationCheck,
+// 		startTime, endTime,
+// 		time.Duration(req.Step)*time.Microsecond,
+// 	)
+// 	if err != nil {
+// 		return nil, model.ErrMutationCheckFailed{
+// 			PQL:        req.MutataionCheckPQL,
+// 			UpperLimit: req.MutationUpperLimit,
+// 			LowerLimit: req.MutationLowerLimit,
+// 			UserMsg:    "自定义指标语法异常",
+// 			Err:        err,
+// 		}
+// 	}
+
+// 	var anormalEventList []model.AnormalEvent
+// 	for _, serie := range mutationSeries {
+// 		if len(serie.Metric.SvcName) > 0 && len(serie.Metric.ContentKey) > 0 {
+// 			labelsStr := fmt.Sprintf("%+v", serie.Metric)
+// 			for _, point := range serie.Values {
+// 				var anormalEvent model.AnormalEvent = model.AnormalEvent{
+// 					Timestamp:       point.TimeStamp,
+// 					AnormalType:     model.AnormalTypeMutation,
+// 					ImpactEndpoints: []model.AnormalEventDetail{},
+// 				}
+// 				anormalEvent.ImpactEndpoints = append(anormalEvent.ImpactEndpoints, model.AnormalEventDetail{
+// 					EndpointKey: model.EndpointKey{
+// 						ServiceName: serie.Metric.SvcName,
+// 						ContentKey:  serie.Metric.ContentKey,
+// 					},
+// 					AlertObject:  serie.Metric.SvcName,
+// 					AlertReason:  "应用关联指标突变",
+// 					AlertMessage: mutationCheck.GetMurationMessage(point.Value, labelsStr),
+// 				})
+// 				anormalEventList = append(anormalEventList, anormalEvent)
+// 			}
+// 		} else if len(serie.Metric.Namespace) > 0 && len(serie.Metric.POD) > 0 {
+// 			instance, endpoints := instanceMap.GetEndpointsByK8sPodNS(serie.Metric.POD, serie.Metric.Namespace)
+// 			if instance == nil {
+// 				continue
+// 			}
+
+// 			labelsStr := fmt.Sprintf("%+v", serie.Metric)
+// 			for _, point := range serie.Values {
+// 				var anormalEvent model.AnormalEvent = model.AnormalEvent{
+// 					Timestamp:       point.TimeStamp,
+// 					AnormalType:     model.AnormalTypeMutation,
+// 					ImpactEndpoints: []model.AnormalEventDetail{},
+// 				}
+// 				for _, endpoint := range endpoints {
+// 					anormalEvent.ImpactEndpoints = append(anormalEvent.ImpactEndpoints, model.AnormalEventDetail{
+// 						EndpointKey:  endpoint,
+// 						AlertObject:  instance.PodName,
+// 						AlertReason:  "应用关联指标突变",
+// 						AlertMessage: mutationCheck.GetMurationMessage(point.Value, labelsStr),
+// 					})
+// 				}
+// 				anormalEventList = append(anormalEventList, anormalEvent)
+// 			}
+// 		} else if len(serie.Metric.PID) > 0 {
+// 			instance, endpoints := instanceMap.GetEndpointsByNodePid(serie.Metric.NodeName, serie.Metric.PID)
+// 			if instance == nil {
+// 				continue
+// 			}
+
+// 			labelsStr := fmt.Sprintf("%+v", serie.Metric)
+// 			for _, point := range serie.Values {
+// 				var anormalEvent model.AnormalEvent = model.AnormalEvent{
+// 					Timestamp:       point.TimeStamp,
+// 					AnormalType:     model.AnormalTypeMutation,
+// 					ImpactEndpoints: []model.AnormalEventDetail{},
+// 				}
+// 				for _, endpoint := range endpoints {
+// 					anormalEvent.ImpactEndpoints = append(anormalEvent.ImpactEndpoints, model.AnormalEventDetail{
+// 						EndpointKey:  endpoint,
+// 						AlertObject:  fmt.Sprintf("(pid:%s) at %s", serie.Metric.PID, instance.NodeName),
+// 						AlertReason:  "应用关联指标突变",
+// 						AlertMessage: mutationCheck.GetMurationMessage(point.Value, labelsStr),
+// 					})
+// 				}
+// 				anormalEventList = append(anormalEventList, anormalEvent)
+// 			}
+// 		} else if len(serie.Metric.NodeName) > 0 {
+// 			endpointsMaps := instanceMap.GetEndpointsByNode(serie.Metric.NodeName)
+// 			if endpointsMaps == nil {
+// 				continue
+// 			}
+
+// 			for instance, endpoints := range endpointsMaps {
+// 				var instanceName string
+// 				if len(instance.PodName) > 0 {
+// 					instanceName = fmt.Sprintf("%s/%s", instance.Namespace, instance.PodName)
+// 				} else {
+// 					instanceName = fmt.Sprintf("(pid:%d)", instance.Pid)
+// 				}
+
+// 				for _, point := range serie.Values {
+// 					var anormalEvent model.AnormalEvent = model.AnormalEvent{
+// 						Timestamp:       point.TimeStamp,
+// 						AnormalType:     model.AnormalTypeMutation,
+// 						ImpactEndpoints: []model.AnormalEventDetail{},
+// 					}
+// 					for _, endpoint := range endpoints {
+// 						anormalEvent.ImpactEndpoints = append(anormalEvent.ImpactEndpoints, model.AnormalEventDetail{
+// 							EndpointKey:  endpoint,
+// 							AlertObject:  instanceName + " at " + instance.NodeName,
+// 							AlertReason:  "应用所在主机指标突变",
+// 							AlertMessage: mutationCheck.GetMurationMessage(point.Value, fmt.Sprintf("%+v", serie.Metric)),
+// 						})
+// 					}
+// 					anormalEventList = append(anormalEventList, anormalEvent)
+// 				}
+// 			}
+// 		} else {
+// 			return nil, model.ErrMutationCheckFailed{
+// 				PQL:        req.MutataionCheckPQL,
+// 				UpperLimit: req.MutationUpperLimit,
+// 				LowerLimit: req.MutationLowerLimit,
+// 				UserMsg:    "指标无法关联到具体服务,Label中需要存在(namespace,pod),(node,pid),(node)组合之一",
+// 				Err:        fmt.Errorf("指标无法关联到服务实例: Metric :%s, Labels: %+v\nLabels需要包含下面的label组合之一: (namespace,pod),(node,pid),(node)", req.MutataionCheckPQL, serie.Metric),
+// 			}
+// 		}
+// 	}
+// 	return anormalEventList, nil
+// }
 
 func (*service) parseErrorEvent(propagations []ck.ErrorPropation, instanceMap *InstanceMap) []model.AnormalEvent {
 	var anormalEventList []model.AnormalEvent
 	for _, propagation := range propagations {
 		errorEvent := model.AnormalEvent{
-			Timestamp:   propagation.Timestamp.UnixMicro(),
-			AnormalType: model.AnormalTypeError,
+			UpdateTSs: []model.AnormalUpdateTS{
+				{
+					AnormalStatus: model.StatusFiring,
+					Timestamp:     propagation.Timestamp.UnixMicro(),
+				},
+				{
+					// 自定义一个一分钟结束的状态
+					AnormalStatus: model.StatusResolved,
+					Timestamp:     propagation.Timestamp.Add(time.Minute).UnixMicro(),
+				},
+			},
+			AnormalType:     model.AnormalTypeError,
+			ImpactEndpoints: []model.AnormalEventDetail{},
 		}
 		for idx, service := range propagation.NodesService {
 			if !propagation.NodesIsError[idx] {
@@ -167,10 +429,12 @@ func (*service) parseErrorEvent(propagations []ck.ErrorPropation, instanceMap *I
 				continue
 			}
 			errorEvent.ImpactEndpoints = append(errorEvent.ImpactEndpoints, model.AnormalEventDetail{
-				EndpointKey:  endpointKey,
-				AlertObject:  propagation.NodesInstance[idx],
-				AlertReason:  strings.Join(propagation.NodesErrorTypes[idx], ";"),
-				AlertMessage: strings.Join(propagation.NodesErrorMsgs[idx], ";"),
+				EndpointKey: endpointKey,
+				AlertObject: propagation.NodesInstance[idx],
+				AlertReason: strings.Join(propagation.NodesErrorTypes[idx], ";"),
+				AlertMessage: map[int64]string{
+					propagation.Timestamp.UnixMicro(): strings.Join(propagation.NodesErrorMsgs[idx], ";"),
+				},
 			})
 		}
 		anormalEventList = append(anormalEventList, errorEvent)
@@ -178,18 +442,43 @@ func (*service) parseErrorEvent(propagations []ck.ErrorPropation, instanceMap *I
 	return anormalEventList
 }
 
-func (*service) parseAlertEvents(alertEvents []ck.PagedAlertEvent, instanceMap *InstanceMap, selectedEvents []string) []model.AnormalEvent {
+func (*service) parseAlertEvents(alertEvents []ck.AlertEventWithKey, instanceMap *InstanceMap, selectedEvents []string, searchStartTime int64) []model.AnormalEvent {
 	var anormalEventList []model.AnormalEvent
-	for _, alertEvent := range alertEvents {
+
+	for i := 0; i < len(alertEvents); i++ {
+		alertEvent := alertEvents[i]
 		if len(selectedEvents) > 0 && !contains(selectedEvents, alertEventPrefix+alertEvent.Group) {
+			// 跳过未选择的事件
+			continue
+		}
+		if alertEvent.Status == model.StatusResolved {
+			// 跳过第一个状态就是Resolved的事件
 			continue
 		}
 
+		// 初始化每个告警的首个事件
+		var updateTSs []model.AnormalUpdateTS
+		var alertMessage = map[int64]string{}
+		if alertEvent.CreateTime.UnixMicro() < searchStartTime {
+			updateTSs = append(updateTSs, model.AnormalUpdateTS{
+				Timestamp:     alertEvent.CreateTime.UnixMicro(),
+				AnormalStatus: model.StatusFiring,
+			})
+			alertMessage = map[int64]string{
+				alertEvent.CreateTime.UnixMicro(): "在查询时间开始前已告警,初次告警在" + alertEvent.CreateTime.Format("2006-01-02 15:04:05"),
+			}
+		}
+		updateTSs = append(updateTSs, model.AnormalUpdateTS{
+			Timestamp:     alertEvent.ReceivedTime.UnixMicro(),
+			AnormalStatus: alertEvent.Status,
+		})
+		alertMessage[alertEvent.ReceivedTime.UnixMicro()] = alertEvent.Detail
 		var anormalEvent model.AnormalEvent = model.AnormalEvent{
-			Timestamp:       alertEvent.ReceivedTime.UnixMicro(),
-			AnormalType:     0,
+			UpdateTSs:       updateTSs,
 			ImpactEndpoints: []model.AnormalEventDetail{},
 		}
+
+		// 完善告警信息
 		switch ck.AlertGroup(alertEvent.Group) {
 		case ck.APP_GROUP:
 			anormalEvent.AnormalType = model.AnormalTypeAlertApp
@@ -200,7 +489,7 @@ func (*service) parseAlertEvents(alertEvents []ck.PagedAlertEvent, instanceMap *
 				},
 				AlertObject:  alertEvent.GetTargetObj(),
 				AlertReason:  alertEvent.Name,
-				AlertMessage: alertEvent.Detail,
+				AlertMessage: alertMessage,
 			})
 		case ck.CONTAINER_GROUP:
 			anormalEvent.AnormalType = model.AnormalTypeAlertContainer
@@ -213,7 +502,7 @@ func (*service) parseAlertEvents(alertEvents []ck.PagedAlertEvent, instanceMap *
 					EndpointKey:  endpoint,
 					AlertObject:  alertEvent.GetTargetObj(),
 					AlertReason:  alertEvent.Name,
-					AlertMessage: alertEvent.Detail,
+					AlertMessage: alertMessage,
 				})
 			}
 		case ck.NETWORK_GROUP:
@@ -233,12 +522,11 @@ func (*service) parseAlertEvents(alertEvents []ck.PagedAlertEvent, instanceMap *
 				}
 			}
 			for _, endpoint := range endpoints {
-
 				anormalEvent.ImpactEndpoints = append(anormalEvent.ImpactEndpoints, model.AnormalEventDetail{
 					EndpointKey:  endpoint,
 					AlertObject:  alertEvent.GetTargetObj(),
 					AlertReason:  alertEvent.Name,
-					AlertMessage: alertEvent.Detail,
+					AlertMessage: alertMessage,
 				})
 			}
 		case ck.INFRA_GROUP:
@@ -256,10 +544,33 @@ func (*service) parseAlertEvents(alertEvents []ck.PagedAlertEvent, instanceMap *
 						EndpointKey:  endpoint,
 						AlertObject:  instanceName + " at " + alertEvent.GetTargetObj(),
 						AlertReason:  alertEvent.Name,
-						AlertMessage: alertEvent.Detail,
+						AlertMessage: alertMessage,
 					})
 				}
 			}
+		}
+
+		var j = i + 1
+		var lastStatus model.Status
+		for j < len(alertEvents) {
+			nextEvent := alertEvents[j]
+			if nextEvent.AlertKey != alertEvent.AlertKey {
+				break
+			}
+			// 跳过重复的resolved事件
+			if nextEvent.Status != model.StatusResolved || lastStatus != model.StatusResolved {
+				anormalEvent.UpdateTSs = append(anormalEvent.UpdateTSs, model.AnormalUpdateTS{
+					Timestamp:     nextEvent.ReceivedTime.UnixMicro(),
+					AnormalStatus: nextEvent.Status,
+				})
+				for _, endpoint := range anormalEvent.ImpactEndpoints {
+					endpoint.AlertMessage[nextEvent.ReceivedTime.UnixMicro()] = nextEvent.Detail
+				}
+				lastStatus = nextEvent.Status
+			}
+			j++
+			// 后续处理时跳过已经完成处理的事件
+			i = j + 1
 		}
 		anormalEventList = append(anormalEventList, anormalEvent)
 	}

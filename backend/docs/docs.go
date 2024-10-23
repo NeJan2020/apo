@@ -177,8 +177,8 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/alerts/descendant/anormal": {
-            "get": {
+        "/api/alerts/descendant/anormal/delta": {
+            "post": {
                 "description": "获取下游告警事件",
                 "consumes": [
                     "application/x-www-form-urlencoded"
@@ -4098,53 +4098,6 @@ const docTemplate = `{
                 }
             }
         },
-        "model.AnormalEvent": {
-            "type": "object",
-            "properties": {
-                "anormalType": {
-                    "description": "异常类型",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/model.AnormalType"
-                        }
-                    ]
-                },
-                "impactEndpoints": {
-                    "description": "受异常影响的端点",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/model.AnormalEventDetail"
-                    }
-                },
-                "timestamp": {
-                    "description": "事件发生的时间戳",
-                    "type": "integer"
-                }
-            }
-        },
-        "model.AnormalEventDetail": {
-            "type": "object",
-            "properties": {
-                "alertMessage": {
-                    "description": "具体的事件信息",
-                    "type": "string"
-                },
-                "alertObject": {
-                    "description": "影响的实例",
-                    "type": "string"
-                },
-                "alertReason": {
-                    "description": "粗略的影响描述",
-                    "type": "string"
-                },
-                "contentKey": {
-                    "type": "string"
-                },
-                "serviceName": {
-                    "type": "string"
-                }
-            }
-        },
         "model.AnormalType": {
             "type": "integer",
             "enum": [
@@ -4153,7 +4106,8 @@ const docTemplate = `{
                 2,
                 3,
                 4,
-                5
+                5,
+                6
             ],
             "x-enum-varnames": [
                 "AnormalTypeUnknown",
@@ -4161,6 +4115,7 @@ const docTemplate = `{
                 "AnormalTypeAlertContainer",
                 "AnormalTypeAlertInfra",
                 "AnormalTypeAlertNet",
+                "AnormalTypeMutation",
                 "AnormalTypeError"
             ]
         },
@@ -4968,6 +4923,53 @@ const docTemplate = `{
                 }
             }
         },
+        "response.DescendantAnormalCounts": {
+            "type": "object",
+            "properties": {
+                "anormalCounts": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "contentKey": {
+                    "type": "string"
+                },
+                "serviceName": {
+                    "type": "string"
+                }
+            }
+        },
+        "response.DescendantAnormalEventRecord": {
+            "type": "object",
+            "properties": {
+                "anormalMsg": {
+                    "type": "string"
+                },
+                "anormalObject": {
+                    "type": "string"
+                },
+                "anormalReason": {
+                    "type": "string"
+                },
+                "anormalStatus": {
+                    "description": "startFiring / updatedFiring / resolved",
+                    "type": "string"
+                },
+                "anormalType": {
+                    "$ref": "#/definitions/model.AnormalType"
+                },
+                "contentKey": {
+                    "type": "string"
+                },
+                "serviceName": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "integer"
+                }
+            }
+        },
         "response.DetailResponse": {
             "type": "object",
             "properties": {
@@ -5217,16 +5219,35 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "anormalCount": {
-                    "$ref": "#/definitions/response.TempChartObject"
-                },
-                "anormalEvents": {
-                    "description": "AnormalEvents []model.AnormalEvent ` + "`" + `json:\"anormalEvents\"` + "`" + `",
-                    "type": "object",
-                    "additionalProperties": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/definitions/model.AnormalEvent"
+                    "description": "AnormalEvents []model.AnormalEvent ` + "`" + `json:\"anormalEvents\"` + "`" + `\nAnormalEvents map[int64][]model.AnormalEvent ` + "`" + `json:\"anormalEvents\"` + "`" + `",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/response.TempChartObject"
                         }
+                    ]
+                },
+                "deltaAnormalEvents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.DescendantAnormalEventRecord"
+                    }
+                },
+                "finalAnormalCounts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.DescendantAnormalCounts"
+                    }
+                },
+                "originAnormalCounts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.DescendantAnormalCounts"
+                    }
+                },
+                "originAnormalEvents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/response.DescendantAnormalEventRecord"
                     }
                 }
             }

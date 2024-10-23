@@ -28,7 +28,14 @@ type GetDescendantAnormalEventRequest struct {
 	Endpoint  string `form:"endpoint" binding:"required"`                  // 查询Endpoint
 	Step      int64  `form:"step" binding:"min=1000000"`                   // 查询步长(us)
 
-	AnormalTypes string `form:"anormalTypes"` //要查询的异常类型
+	DeltaStartTime int64 `form:"deltaStartTime" binding:"min=0"` // 播放开始时间
+	DeltaEndTime   int64 `form:"deltaEndTime" binding:"min=0"`   // 播放结束时间
+
+	AnormalTypes string `form:"anormalTypes" json:"anormalTypes"` //要查询的异常类型
+
+	MutataionCheckPQL  string `form:"mutationCheckPOL" json:"mutationCheckPQL"`     // 需要执行故障检测的语句
+	MutationUpperLimit string `form:"mutationUpperLimit" json:"mutationUpperLimit"` // 故障检测上限,使用数学表达式和内置变量(avg.1h,pct.99)
+	MutationLowerLimit string `form:"mutationLowerLimit" json:"mutationLowerLimit"` // 故障检测下限
 }
 
 type GetPolarisInferRequest struct {

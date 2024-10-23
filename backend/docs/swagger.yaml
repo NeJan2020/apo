@@ -522,37 +522,6 @@ definitions:
         $ref: '#/definitions/model.AlertDetail'
       type: array
     type: object
-  model.AnormalEvent:
-    properties:
-      anormalType:
-        allOf:
-        - $ref: '#/definitions/model.AnormalType'
-        description: 异常类型
-      impactEndpoints:
-        description: 受异常影响的端点
-        items:
-          $ref: '#/definitions/model.AnormalEventDetail'
-        type: array
-      timestamp:
-        description: 事件发生的时间戳
-        type: integer
-    type: object
-  model.AnormalEventDetail:
-    properties:
-      alertMessage:
-        description: 具体的事件信息
-        type: string
-      alertObject:
-        description: 影响的实例
-        type: string
-      alertReason:
-        description: 粗略的影响描述
-        type: string
-      contentKey:
-        type: string
-      serviceName:
-        type: string
-    type: object
   model.AnormalType:
     enum:
     - 0
@@ -561,6 +530,7 @@ definitions:
     - 3
     - 4
     - 5
+    - 6
     type: integer
     x-enum-varnames:
     - AnormalTypeUnknown
@@ -568,6 +538,7 @@ definitions:
     - AnormalTypeAlertContainer
     - AnormalTypeAlertInfra
     - AnormalTypeAlertNet
+    - AnormalTypeMutation
     - AnormalTypeError
   model.ModifyTableTTLMap:
     properties:
@@ -1129,6 +1100,37 @@ definitions:
         description: 主键ID
         type: integer
     type: object
+  response.DescendantAnormalCounts:
+    properties:
+      anormalCounts:
+        additionalProperties:
+          type: integer
+        type: object
+      contentKey:
+        type: string
+      serviceName:
+        type: string
+    type: object
+  response.DescendantAnormalEventRecord:
+    properties:
+      anormalMsg:
+        type: string
+      anormalObject:
+        type: string
+      anormalReason:
+        type: string
+      anormalStatus:
+        description: startFiring / updatedFiring / resolved
+        type: string
+      anormalType:
+        $ref: '#/definitions/model.AnormalType'
+      contentKey:
+        type: string
+      serviceName:
+        type: string
+      timestamp:
+        type: integer
+    type: object
   response.DetailResponse:
     properties:
       id:
@@ -1297,14 +1299,27 @@ definitions:
   response.GetDescendantAnormalEventResponse:
     properties:
       anormalCount:
-        $ref: '#/definitions/response.TempChartObject'
-      anormalEvents:
-        additionalProperties:
-          items:
-            $ref: '#/definitions/model.AnormalEvent'
-          type: array
-        description: AnormalEvents []model.AnormalEvent `json:"anormalEvents"`
-        type: object
+        allOf:
+        - $ref: '#/definitions/response.TempChartObject'
+        description: |-
+          AnormalEvents []model.AnormalEvent `json:"anormalEvents"`
+          AnormalEvents map[int64][]model.AnormalEvent `json:"anormalEvents"`
+      deltaAnormalEvents:
+        items:
+          $ref: '#/definitions/response.DescendantAnormalEventRecord'
+        type: array
+      finalAnormalCounts:
+        items:
+          $ref: '#/definitions/response.DescendantAnormalCounts'
+        type: array
+      originAnormalCounts:
+        items:
+          $ref: '#/definitions/response.DescendantAnormalCounts'
+        type: array
+      originAnormalEvents:
+        items:
+          $ref: '#/definitions/response.DescendantAnormalEventRecord'
+        type: array
     type: object
   response.GetDescendantMetricsResponse:
     properties:
@@ -2041,8 +2056,8 @@ paths:
       summary: 列出告警通知对象
       tags:
       - API.alerts
-  /api/alerts/descendant/anormal:
-    get:
+  /api/alerts/descendant/anormal/delta:
+    post:
       consumes:
       - application/x-www-form-urlencoded
       description: 获取下游告警事件

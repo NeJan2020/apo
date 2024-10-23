@@ -94,5 +94,7 @@ var zhCnText = map[string]string{
 	AlertEventIDMissing:              "查询告警事件影响面失败, 搜索时间范围内未找到告警事件ID对应的事件 ",
 
 	AlertAnalyzeDescendantAnormalEventError: "分析告警事件失败: 查询下游异常事件失败",
-	GetAnomalySpanError: "获取故障报告失败",
+	GetAnomalySpanError:                     "获取故障报告失败",
+
+	MutationPQLCheckFailed: "通过PQL检查指标突变失败",
 }

@@ -82,6 +82,11 @@ const (
 
 	SQL_GET_ALERT_EVENT = `SELECT source,group,id,create_time,update_time,end_time,received_time,severity,name,detail,tags,status
 	FROM alert_event %s %s`
+
+	SQL_GET_ALERT_EVENT_WITH_LABEL_KEY = `SELECT source,group,id,create_time,update_time,end_time,received_time,severity,name,detail,tags,status
+        ,arrayStringConcat(arrayMap(x -> x.2, arraySort(arrayZip(mapKeys(tags), mapValues(tags)))), ', ') AS alert_key
+    FROM alert_event
+	%s %s`
 )
 
 // GetAlertEventCountGroupByInstance 快速查询每个Instance关联的告警数量(按告警级别分别计数)
@@ -172,7 +177,35 @@ func (ch *chRepo) GetAlertEvents(startTime time.Time, endTime time.Time, filter 
 // instances为空时,不返回任何告警
 func (ch *chRepo) GetAlertEventsByInstanceAndEndpoints(startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance, endpoints []model.EndpointKey, pageParam *request.PageParam, sortBy string) ([]PagedAlertEvent, int, error) {
 	whereInstance := extractFilter(filter, endpoints, instances)
+	// TODO 改用 AlertEventWithKey
 	return ch.getAlertEventsByWhere(startTime, endTime, filter, whereInstance, sortBy, pageParam)
+}
+
+func (ch *chRepo) GetAlertEventsWithKeyByInstanceAndEndpoints(startTime time.Time, endTime time.Time, filter request.AlertFilter, instances []*model.ServiceInstance, endpoints []model.EndpointKey) ([]AlertEventWithKey, error) {
+	whereInstance := extractFilter(filter, endpoints, instances)
+	return ch.getGroupAlertEvents(startTime, endTime, filter, whereInstance)
+}
+
+func (ch *chRepo) getGroupAlertEvents(startTime time.Time, endTime time.Time, filter request.AlertFilter, whereInstance *whereSQL) ([]AlertEventWithKey, error) {
+	builder := NewQueryBuilder().
+		Between("received_time", startTime.Unix(), endTime.Unix()).
+		EqualsNotEmpty("source", filter.Source).
+		EqualsNotEmpty("group", filter.Group).
+		EqualsNotEmpty("name", filter.Name).
+		EqualsNotEmpty("id", filter.ID).
+		EqualsNotEmpty("severity", filter.Severity).
+		EqualsNotEmpty("status", filter.Status).
+		And(whereInstance)
+
+	orderBuilder := NewByLimitBuilder().
+		OrderBy("alert_key", true).
+		OrderBy("received_time", true).
+		Limit(5000)
+
+	sql := fmt.Sprintf(SQL_GET_ALERT_EVENT_WITH_LABEL_KEY, builder.String(), orderBuilder.String())
+	var events []AlertEventWithKey
+	err := ch.conn.Select(context.Background(), &events, sql, builder.values...)
+	return events, err
 }
 
 func (ch *chRepo) getAlertEventsByWhere(startTime time.Time, endTime time.Time, filter request.AlertFilter, whereInstance *whereSQL, sortBy string, pageParam *request.PageParam) ([]PagedAlertEvent, int, error) {
@@ -341,6 +374,12 @@ type PagedAlertEvent struct {
 	// 记录行号
 	Rn         uint64 `ch:"rn" json:"-"`
 	TotalCount uint64 `ch:"total_count" json:"-"`
+}
+
+type AlertEventWithKey struct {
+	model.AlertEvent
+
+	AlertKey string `ch:"alert_key" json:"alertKey"`
 }
 
 func RnLimit(p *request.PageParam) string {

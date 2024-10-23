@@ -10,17 +10,24 @@ const (
 	AnormalTypeAlertInfra
 	AnormalTypeAlertNet
 
+	AnormalTypeMutation
+
 	AnormalTypeError
 )
 
 // AnormalEvent 存储通用的异常事件,用于告警分析时汇总各种类型告警,统一返回
 type AnormalEvent struct {
-	// 事件发生的时间戳
-	Timestamp int64 `json:"timestamp"`
+	// 事件状态更新时间戳
+	UpdateTSs []AnormalUpdateTS `json:"updateTSs"`
 	// 异常类型
 	AnormalType AnormalType `json:"anormalType"`
 	// 受异常影响的端点
 	ImpactEndpoints []AnormalEventDetail `json:"impactEndpoints"`
+}
+
+type AnormalUpdateTS struct {
+	AnormalStatus Status
+	Timestamp     int64
 }
 
 type AnormalEventDetail struct {
@@ -32,8 +39,8 @@ type AnormalEventDetail struct {
 	// 粗略的影响描述
 	AlertReason string `json:"alertReason"`
 
-	// 具体的事件信息
-	AlertMessage string `json:"alertMessage"`
+	// 不同时间点的异常信息
+	AlertMessage map[int64]string `json:"alertMessage"`
 }
 
 type EndpointKey struct {

@@ -8,8 +8,32 @@ import (
 
 type GetDescendantAnormalEventResponse struct {
 	// AnormalEvents []model.AnormalEvent `json:"anormalEvents"`
-	AnormalEvents map[int64][]model.AnormalEvent `json:"anormalEvents"`
-	AnormalCount  TempChartObject                `json:"anormalCount"`
+	// AnormalEvents map[int64][]model.AnormalEvent `json:"anormalEvents"`
+	AnormalCount TempChartObject `json:"anormalCount"`
+
+	OriginAnormalCounts []DescendantAnormalCounts `json:"originAnormalCounts"`
+	FinalAnormalCounts  []DescendantAnormalCounts `json:"finalAnormalCounts"`
+
+	OriginAnormalEvents []DescendantAnormalEventRecord `json:"originAnormalEvents"`
+	DeltaAnormalEvents  []DescendantAnormalEventRecord `json:"deltaAnormalEvents"`
+}
+
+type DescendantAnormalCounts struct {
+	model.EndpointKey
+
+	AnormalCountsMap map[model.AnormalType]int64 `json:"anormalCounts"`
+}
+
+type DescendantAnormalEventRecord struct {
+	model.EndpointKey
+
+	AnormalType   model.AnormalType `json:"anormalType"`
+	Timestamp     int64             `json:"timestamp"`
+	AnormalObject string            `json:"anormalObject"`
+	AnormalReason string            `json:"anormalReason"`
+	AnormalMsg    string            `json:"anormalMsg"`
+
+	AnormalStatus string `json:"anormalStatus"` // startFiring / updatedFiring / resolved
 }
 
 type GetAlertRuleFileResponse struct {

@@ -19,6 +19,10 @@ func (s *service) AlertImpact(eventid string, startTimeTs, endTimeTs int64) ([]c
 	endTime := time.UnixMicro(endTimeTs)
 
 	// 从Clickhouse中获取到对应的告警
+	// if eventid == "" {
+	// 	events, count, err := s.chRepo.GetAlertEvents(startTime, endTime, request.AlertFilter{}, nil, nil, clickhouse.ReceivedTimeOrders)
+
+	// }
 	event, err := s.chRepo.GetAlertEventById(eventid, startTime, endTime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get alert eventId[%s]: %v", eventid, err)

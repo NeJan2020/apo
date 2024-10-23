@@ -103,6 +103,7 @@ const (
 
 	AlertAnalyzeDescendantAnormalEventError = "B0731"
 	GetAnomalySpanError                     = "B0732"
+	MutationPQLCheckFailed                  = "B0733"
 )
 
 func Text(code string) string {
