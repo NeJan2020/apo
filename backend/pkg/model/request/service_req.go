@@ -9,7 +9,11 @@ type GetServiceEndpointTopologyRequest struct {
 	EntryEndpoint string `form:"entryEndpoint"`                                // 入口Endpoint
 }
 
-type GetServiceEndpointRelationRequest = GetServiceEndpointTopologyRequest
+type GetServiceEndpointRelationRequest struct {
+	GetServiceEndpointTopologyRequest
+
+	WithTopologyLevel bool `form:"withTopologyLevel"` // 是否携带拓扑层级
+}
 
 type GetDescendantMetricsRequest struct {
 	StartTime     int64  `form:"startTime" binding:"min=0"`                    // 查询开始时间
